@@ -66,7 +66,7 @@
             background: var(--card-bg);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            padding: 1.25rem;
+            padding: 1rem;
             border-radius: 1rem;
             border: 1px solid var(--border-color);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
@@ -131,16 +131,26 @@
             gap: 0.5rem;
         }
 
+        .log-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+            flex: 1;
+            min-width: 0;
+            width: 100%;
+            overflow: visible;
+        }
+
         .log-item {
             background: white;
-            padding: 0.75rem;
+            padding: 0.625rem 0.5rem;
             border-radius: 0.625rem;
             border: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: flex-start;
             transition: all 0.2s;
-            cursor: grab;
+            cursor: default;
             user-select: none;
         }
 
@@ -167,31 +177,37 @@
         .drag-handle {
             color: var(--text-muted);
             cursor: grab;
-            padding: 2px 4px;
-            margin-right: 2px;
-            font-size: 14px;
+            padding: 4px 2px;
+            margin-right: 0px;
+            font-size: 16px;
             line-height: 1;
             flex-shrink: 0;
+            opacity: 0.5;
+            transition: opacity 0.2s;
         }
 
-        .log-info {
-            display: flex;
-            flex-direction: column;
-            gap: 0.125rem;
-            max-width: 200px;
+        .log-item:hover .drag-handle {
+            opacity: 1;
         }
 
         .log-name {
             font-size: 0.8125rem;
             font-weight: 600;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            overflow-wrap: break-word;
+            word-break: break-all;
+            display: block;
+            width: 100%;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
         }
 
         .log-meta {
             font-size: 0.6875rem;
             color: var(--text-muted);
+            line-height: 1.4;
+            display: block;
+            width: 100%;
         }
 
         .log-color-indicator {
@@ -199,7 +215,9 @@
             height: 8px;
             border-radius: 50%;
             display: inline-block;
-            margin-right: 0.5rem;
+            flex-shrink: 0;
+            margin-right: 0.25rem;
+            vertical-align: middle;
         }
 
         .delete-log {
@@ -250,6 +268,20 @@
             padding: 4px;
             border-radius: 4px;
             transition: all 0.2s;
+        }
+
+        .edit-log {
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .log-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
         }
 
         .recolor-log:hover {
@@ -383,6 +415,7 @@
         const totalPointsEl = document.getElementById('total-points');
         const totalDistEl = document.getElementById('total-dist');
         const clearAllBtn = document.getElementById('clear-all');
+        const statusDisplay = document.getElementById('status-display');
 
         fileInput.addEventListener('change', async function (e) {
             const files = Array.from(e.target.files);
@@ -394,28 +427,36 @@
         });
 
         async function processFile(file) {
-            const reader = new FileReader();
-            reader.onload = function (event) {
-                try {
-                    const rawData = JSON.parse(event.target.result);
-                    if (!Array.isArray(rawData)) return;
-
-                    const entries = rawData.map(p => typeof p === 'string' ? JSON.parse(p) : p)
-                        .filter(e => e.position && e.timestamp)
-                        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-
-                    if (entries.length === 0) return;
-
-                    const stats = calculateStats(entries);
-                    const colorSet = colors[colorIdx % colors.length];
-                    colorIdx++;
-
-                    addLogToMap(file.name, entries, stats, colorSet);
-                } catch (err) {
-                    console.error("Fehler beim Verarbeiten von", file.name, err);
+            try {
+                // Try to get a FileSystemHandle if available (Chromium API)
+                let fileHandle = null;
+                if (typeof file.getFileSystemHandle === 'function') {
+                    try {
+                        fileHandle = await file.getFileSystemHandle();
+                    } catch (err) {
+                        // ignore permission errors
+                        fileHandle = null;
+                    }
                 }
-            };
-            reader.readAsText(file);
+
+                const text = await file.text();
+                const rawData = JSON.parse(text);
+                if (!Array.isArray(rawData)) return;
+
+                const entries = rawData.map(p => typeof p === 'string' ? JSON.parse(p) : p)
+                    .filter(e => e.position && e.timestamp)
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+                if (entries.length === 0) return;
+
+                const stats = calculateStats(entries);
+                const colorSet = colors[colorIdx % colors.length];
+                colorIdx++;
+
+                addLogToMap(file.name, entries, stats, colorSet, fileHandle, text);
+            } catch (err) {
+                console.error("Fehler beim Verarbeiten von", file.name, err);
+            }
         }
 
         function calculateStats(entries) {
@@ -478,7 +519,7 @@
             return `${mins}m ${secs}s`;
         }
 
-        function addLogToMap(filename, entries, stats, colorSet) {
+        function addLogToMap(filename, entries, stats, colorSet, fileHandle = null, rawText = null) {
             const group = L.featureGroup().addTo(map);
 
             // Segment the path based on seeder status
@@ -504,7 +545,7 @@
             const endM = L.circleMarker([entries[entries.length - 1].position.latitude, entries[entries.length - 1].position.longitude],
                 { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
 
-            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true, entries });
+            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true, entries, fileHandle, rawText, originalName: filename });
 
             updateUI();
 
@@ -512,6 +553,144 @@
             if (allGroups.length > 0) {
                 const firstGroup = allGroups[0];
                 map.fitBounds(L.featureGroup(allGroups).getBounds(), { padding: [50, 50] });
+            }
+        }
+
+        // Show status messages in header
+        function showStatus(msg, timeout = 3000) {
+            if (!statusDisplay) return;
+            statusDisplay.textContent = msg;
+            if (timeout > 0) setTimeout(() => statusDisplay.textContent = 'Bereit', timeout);
+        }
+
+        // Start an inline rename flow for a log item
+        function startRename(oldName, itemEl) {
+            const log = activeLogs.get(oldName);
+            if (!log) return;
+            const nameDiv = itemEl.querySelector('.log-name');
+            // Temporarily disable dragging for this item
+            itemEl.draggable = false;
+            
+            // Create container for rename UI
+            const container = document.createElement('div');
+            container.style.display = 'flex';
+            container.style.flexDirection = 'column';
+            container.style.gap = '8px';
+            container.style.width = '100%';
+            container.style.padding = '4px 0';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = oldName;
+            input.style.width = '100%';
+            input.style.boxSizing = 'border-box';
+            input.style.fontWeight = '600';
+            input.style.padding = '6px';
+            input.style.borderRadius = '4px';
+            input.style.border = '1px solid var(--primary-color)';
+
+            const actions = document.createElement('div');
+            actions.style.display = 'flex';
+            actions.style.gap = '6px';
+            actions.style.justifyContent = 'flex-end';
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'btn btn-primary';
+            saveBtn.textContent = 'Speichern';
+            saveBtn.style.padding = '4px 12px';
+            saveBtn.style.fontSize = '0.75rem';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'btn btn-ghost';
+            cancelBtn.textContent = 'Abbrechen';
+            cancelBtn.style.padding = '4px 12px';
+            cancelBtn.style.fontSize = '0.75rem';
+
+            actions.appendChild(cancelBtn);
+            actions.appendChild(saveBtn);
+            container.appendChild(input);
+            container.appendChild(actions);
+
+            nameDiv.innerHTML = '';
+            nameDiv.appendChild(container);
+
+            input.focus();
+            input.select(); // auto-select text for easier editing
+
+            cancelBtn.onclick = (e) => { e.stopPropagation(); updateUI(); };
+            saveBtn.onclick = async (e) => {
+                e.stopPropagation();
+                const newName = input.value.trim();
+                if (!newName) { showStatus('Ungültiger Name', 2000); return; }
+                await renameLog(oldName, newName);
+            };
+            
+            // Handle Enter key
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter') saveBtn.click();
+                if (e.key === 'Escape') cancelBtn.click();
+            };
+        }
+
+        async function renameLog(oldName, newName) {
+            if (oldName === newName) return updateUI();
+            if (activeLogs.has(newName)) { showStatus('Name existiert bereits', 3000); return; }
+
+            const log = activeLogs.get(oldName);
+            if (!log) return;
+
+            // Update map state key
+            const prevOriginal = log.originalName || oldName;
+            activeLogs.delete(oldName);
+            log.originalName = newName;
+            activeLogs.set(newName, log);
+            updateUI();
+
+            // Try to save back to filesystem
+            const content = typeof log.rawText === 'string' ? log.rawText : JSON.stringify(log.entries, null, 2);
+
+            // If we have a FileSystemFileHandle and the name did not change, overwrite
+            try {
+                if (log.fileHandle && typeof log.fileHandle.createWritable === 'function') {
+                    // If filename didn't change compared to original, overwrite the original file via handle.
+                    if (newName === prevOriginal) {
+                        const w = await log.fileHandle.createWritable();
+                        await w.write(content);
+                        await w.close();
+                        showStatus('Datei überschrieben', 2500);
+                        return;
+                    }
+                }
+
+                // Otherwise ask user where to save (Save As) if API available
+                if (window.showSaveFilePicker) {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: newName,
+                        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(content);
+                    await writable.close();
+                    // store new handle for future overwrites
+                    log.fileHandle = handle;
+                    showStatus('Datei gespeichert (neuer Speicherort)', 3000);
+                    return;
+                }
+
+                // Fallback: trigger download
+                const blob = new Blob([content], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = newName;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+                showStatus('Datei als Download gespeichert', 3000);
+            } catch (err) {
+                console.error('Fehler beim Speichern:', err);
+                showStatus('Fehler beim Speichern', 3000);
             }
         }
 
@@ -650,39 +829,45 @@
 
                 item.innerHTML = `
                     <span class="drag-handle" title="Verschieben">&#8942;</span>
-                    <div class="log-info" style="flex:1; min-width:0; margin:0 6px;">
+                    <div class="log-info" style="flex:1; min-width:0; margin-left:2px;">
                         <div class="log-name">
                             <span class="log-color-indicator" style="background-color: ${log.colorSet.base}"></span>
                             ${filename}
                         </div>
                         <div class="log-meta">${log.stats.saatzeit} Saat | ${log.stats.seedingDistance.toFixed(2)} km Saatdist.</div>
-                    </div>
-                    <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
-                        <div class="recolor-log" title="Farbe zufällig ändern">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="13.5" cy="6.5" r="1" fill="currentColor"></circle>
-                                <circle cx="17.5" cy="10.5" r="1" fill="currentColor"></circle>
-                                <circle cx="8.5" cy="7.5" r="1" fill="currentColor"></circle>
-                                <circle cx="6.5" cy="12.5" r="1" fill="currentColor"></circle>
-                                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
-                            </svg>
-                        </div>
-                        <div class="star-log${isStarred ? ' starred' : ''}" title="${isStarred ? 'Stern entfernen' : 'Favorit markieren'}">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? '#f59e0b' : 'none'}" stroke="${isStarred ? '#f59e0b' : 'currentColor'}" stroke-width="2">
-                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                            </svg>
-                        </div>
-                        <div class="toggle-log" title="${isVisible ? 'Ausblenden' : 'Einblenden'}">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                ${isVisible
+                        <div class="log-actions" style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+                            <div class="edit-log" title="Umbenennen">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
+                                    <path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path>
+                                </svg>
+                            </div>
+                            <div class="recolor-log" title="Farbe zufällig ändern">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="13.5" cy="6.5" r="1" fill="currentColor"></circle>
+                                    <circle cx="17.5" cy="10.5" r="1" fill="currentColor"></circle>
+                                    <circle cx="8.5" cy="7.5" r="1" fill="currentColor"></circle>
+                                    <circle cx="6.5" cy="12.5" r="1" fill="currentColor"></circle>
+                                    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+                                </svg>
+                            </div>
+                            <div class="star-log${isStarred ? ' starred' : ''}" title="${isStarred ? 'Stern entfernen' : 'Favorit markieren'}">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? '#f59e0b' : 'none'}" stroke="${isStarred ? '#f59e0b' : 'currentColor'}" stroke-width="2">
+                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                </svg>
+                            </div>
+                            <div class="toggle-log" title="${isVisible ? 'Ausblenden' : 'Einblenden'}">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    ${isVisible
                         ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'
                         : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line>'}
-                            </svg>
-                        </div>
-                        <div class="delete-log" title="Löschen">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-                            </svg>
+                                </svg>
+                            </div>
+                            <div class="delete-log" title="Löschen">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                                </svg>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -714,6 +899,11 @@
                 item.querySelector('.star-log').onclick = (e) => { e.stopPropagation(); toggleStar(filename); };
                 item.querySelector('.toggle-log').onclick = (e) => { e.stopPropagation(); toggleLog(filename); };
                 item.querySelector('.delete-log').onclick = (e) => { e.stopPropagation(); removeLog(filename); };
+                const editBtn = item.querySelector('.edit-log');
+                if (editBtn) {
+                    editBtn.onclick = (e) => { e.stopPropagation(); startRename(filename, item); };
+                    editBtn.ondragstart = (e) => e.preventDefault();
+                }
                 item.onclick = () => {
                     if (isVisible) {
                         map.fitBounds(log.group.getBounds(), { padding: [50, 50] });
