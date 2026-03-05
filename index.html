@@ -244,6 +244,19 @@
             color: #f59e0b;
         }
 
+        .recolor-log {
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .recolor-log:hover {
+            background-color: #f0fdf4;
+            color: #10b981;
+        }
+
         .log-hidden {
             opacity: 0.45;
         }
@@ -491,7 +504,7 @@
             const endM = L.circleMarker([entries[entries.length - 1].position.latitude, entries[entries.length - 1].position.longitude],
                 { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
 
-            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true });
+            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true, entries });
 
             updateUI();
 
@@ -500,6 +513,47 @@
                 const firstGroup = allGroups[0];
                 map.fitBounds(L.featureGroup(allGroups).getBounds(), { padding: [50, 50] });
             }
+        }
+
+        function highlightLog(filename, on) {
+            const log = activeLogs.get(filename);
+            if (!log || log.visible === false) return;
+            log.group.eachLayer(l => {
+                if (l instanceof L.Polyline) {
+                    const isPrimary = l.options.color === log.colorSet.base;
+                    l.setStyle(on
+                        ? { weight: isPrimary ? 8 : 6, opacity: 1 }
+                        : { weight: isPrimary ? 5 : 3.5, opacity: isPrimary ? 1 : 0.7 }
+                    );
+                }
+            });
+        }
+
+        function recolorLog(filename) {
+            const log = activeLogs.get(filename);
+            if (!log || !log.entries) return;
+            const h = Math.floor(Math.random() * 360);
+            const newColorSet = {
+                base: `hsl(${h}, 80%, 42%)`,
+                light: `hsl(${h}, 40%, 65%)`
+            };
+            log.colorSet = newColorSet;
+            log.group.clearLayers();
+            // Redraw segments with new color
+            let seg = [log.entries[0]];
+            let curStatus = (log.entries[0].seeder && log.entries[0].seeder.status === 'on') ? 'on' : 'off';
+            for (let i = 1; i < log.entries.length; i++) {
+                const e = log.entries[i];
+                const s = (e.seeder && e.seeder.status === 'on') ? 'on' : 'off';
+                if (s === curStatus) { seg.push(e); }
+                else {
+                    drawSegment(seg, curStatus, newColorSet, log.group, filename, log.stats);
+                    seg = [log.entries[i - 1], e];
+                    curStatus = s;
+                }
+            }
+            drawSegment(seg, curStatus, newColorSet, log.group, filename, log.stats);
+            updateUI();
         }
 
         function drawSegment(points, status, colorSet, group, filename, stats) {
@@ -604,6 +658,15 @@
                         <div class="log-meta">${log.stats.saatzeit} Saat | ${log.stats.seedingDistance.toFixed(2)} km Saatdist.</div>
                     </div>
                     <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
+                        <div class="recolor-log" title="Farbe zufällig ändern">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="13.5" cy="6.5" r="1" fill="currentColor"></circle>
+                                <circle cx="17.5" cy="10.5" r="1" fill="currentColor"></circle>
+                                <circle cx="8.5" cy="7.5" r="1" fill="currentColor"></circle>
+                                <circle cx="6.5" cy="12.5" r="1" fill="currentColor"></circle>
+                                <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
+                            </svg>
+                        </div>
                         <div class="star-log${isStarred ? ' starred' : ''}" title="${isStarred ? 'Stern entfernen' : 'Favorit markieren'}">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? '#f59e0b' : 'none'}" stroke="${isStarred ? '#f59e0b' : 'currentColor'}" stroke-width="2">
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
@@ -647,6 +710,7 @@
                     if (fromName !== filename) reorderLogs(fromName, filename);
                 });
 
+                item.querySelector('.recolor-log').onclick = (e) => { e.stopPropagation(); recolorLog(filename); };
                 item.querySelector('.star-log').onclick = (e) => { e.stopPropagation(); toggleStar(filename); };
                 item.querySelector('.toggle-log').onclick = (e) => { e.stopPropagation(); toggleLog(filename); };
                 item.querySelector('.delete-log').onclick = (e) => { e.stopPropagation(); removeLog(filename); };
@@ -656,6 +720,10 @@
                         log.group.getLayers()[0].openPopup();
                     }
                 };
+
+                // Hover -> highlight route on map
+                item.addEventListener('mouseenter', () => highlightLog(filename, true));
+                item.addEventListener('mouseleave', () => highlightLog(filename, false));
 
                 logListDiv.appendChild(item);
             });
