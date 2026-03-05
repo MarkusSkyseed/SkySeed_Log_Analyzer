@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flight Log Analyzer - Skyseed</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --bg-light: #f8fafc;
+            --card-bg: rgba(255, 255, 255, 0.95);
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --accent-color: #10b981;
+            --error-color: #ef4444;
+            --border-color: rgba(0, 0, 0, 0.08);
+            --header-gradient: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            padding: 0.75rem 1.5rem;
+            background: var(--header-gradient);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: white;
+            text-transform: uppercase;
+        }
+
+        #map {
+            flex-grow: 1;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .side-panel {
+            position: absolute;
+            top: 4.5rem;
+            right: 1.5rem;
+            z-index: 1000;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 1.25rem;
+            border-radius: 1rem;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            width: 320px;
+            max-height: calc(100vh - 7rem);
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            overflow-y: auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.625rem 1rem;
+            font-size: 0.8125rem;
+            font-weight: 600;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-ghost:hover {
+            background: #f1f5f9;
+            color: var(--text-dark);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .log-section h2 {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin: 0 0 0.75rem 0;
+            letter-spacing: 0.05em;
+        }
+
+        .log-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .log-item {
+            background: white;
+            padding: 0.75rem;
+            border-radius: 0.625rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s;
+        }
+
+        .log-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .log-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.125rem;
+            max-width: 200px;
+        }
+
+        .log-name {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .log-meta {
+            font-size: 0.6875rem;
+            color: var(--text-muted);
+        }
+
+        .log-color-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+
+        .delete-log {
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .delete-log:hover {
+            background-color: #fee2e2;
+            color: var(--error-color);
+        }
+
+        .empty-state {
+            font-size: 0.8125rem;
+            color: var(--text-muted);
+            text-align: center;
+            padding: 1rem;
+            border: 2px dashed var(--border-color);
+            border-radius: 0.75rem;
+        }
+
+        /* Custom Popup Style */
+        .leaflet-popup-content-wrapper {
+            border-radius: 0.75rem !important;
+            padding: 4px !important;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .leaflet-popup-content {
+            margin: 0.75rem !important;
+            font-family: 'Inter', sans-serif !important;
+            font-size: 0.8125rem !important;
+        }
+
+        /* Leaflet Layer Control Customization */
+        .leaflet-control-layers {
+            border-radius: 0.75rem !important;
+            border: 1px solid var(--border-color) !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+            padding: 6px 10px !important;
+        }
+
+        .leaflet-control-layers-toggle {
+            width: 36px !important;
+            height: 36px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 4L4 28L16 24L28 28L16 4Z" fill="white" />
+            </svg>
+            <h1>Skyseed Analyzer</h1>
+        </div>
+        <div id="status-display" style="font-size: 0.75rem; color: rgba(255,255,255,0.8);">Bereit</div>
+    </header>
+
+    <div id="map"></div>
+
+    <div class="side-panel">
+        <div class="log-section">
+            <label for="file-input" class="btn btn-primary" style="width: 100%; box-sizing: border-box;">
+                Logs hinzufügen
+            </label>
+            <input type="file" id="file-input" multiple accept=".json,.*">
+        </div>
+
+        <div class="log-section">
+            <h2>Geladene Logs</h2>
+            <div id="log-list" class="log-list">
+                <div class="empty-state">Keine Logs geladen</div>
+            </div>
+        </div>
+
+        <div id="stats-section" class="log-section"
+            style="display: none; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                <span class="label">Gesamtpunkte:</span>
+                <span class="value" id="total-points">0</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
+                <span class="label">Gesamtdistanz:</span>
+                <span class="value" id="total-dist">0.00 km</span>
+            </div>
+            <button id="clear-all" class="btn btn-ghost" style="width: 100%; margin-top: 1rem;">Alle löschen</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script>
+        // Map Setup
+        const streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+        });
+        const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Esri'
+        });
+
+        const map = L.map('map', { zoomControl: false, layers: [streetLayer] }).setView([51.1657, 10.4515], 6);
+        L.control.zoom({ position: 'bottomright' }).addTo(map);
+        L.control.layers({ "Straße": streetLayer, "Satelit": satelliteLayer }, null, { position: 'topleft' }).addTo(map);
+
+        // State Management
+        const activeLogs = new Map(); // filename -> {polyline, markers, data, color}
+        const colors = ['#2563eb', '#d946ef', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899'];
+        let colorIdx = 0;
+
+        const fileInput = document.getElementById('file-input');
+        const logListDiv = document.getElementById('log-list');
+        const statsSection = document.getElementById('stats-section');
+        const totalPointsEl = document.getElementById('total-points');
+        const totalDistEl = document.getElementById('total-dist');
+        const clearAllBtn = document.getElementById('clear-all');
+
+        fileInput.addEventListener('change', async function (e) {
+            const files = Array.from(e.target.files);
+            for (const file of files) {
+                if (activeLogs.has(file.name)) continue;
+                await processFile(file);
+            }
+            fileInput.value = '';
+        });
+
+        async function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const logData = JSON.parse(event.target.result);
+                    if (!Array.isArray(logData)) return;
+
+                    const coordinates = [];
+                    let firstEntryId = "Unbekannt";
+
+                    logData.forEach((p, idx) => {
+                        try {
+                            const entry = typeof p === 'string' ? JSON.parse(p) : p;
+                            if (idx === 0 && entry.id) firstEntryId = entry.id;
+                            if (entry.position) coordinates.push([entry.position.latitude, entry.position.longitude]);
+                        } catch (e) { }
+                    });
+
+                    if (coordinates.length > 0) {
+                        const color = colors[colorIdx % colors.length];
+                        colorIdx++;
+                        addLogToMap(file.name, firstEntryId, coordinates, color);
+                    }
+                } catch (err) {
+                    console.error("Fehler beim Verarbeiten von", file.name, err);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function addLogToMap(filename, logId, coords, color) {
+            const polyline = L.polyline(coords, {
+                color: color,
+                weight: 4,
+                opacity: 0.8,
+                className: 'path-interactive'
+            }).addTo(map);
+
+            polyline.bindPopup(`
+                <strong>Log-Details</strong><br>
+                <span style="color:${color}">●</span> Name: ${filename}<br>
+                ID: ${logId}<br>
+                Punkte: ${coords.length}
+            `);
+
+            polyline.on('mouseover', function () { this.setStyle({ weight: 7, opacity: 1 }); });
+            polyline.on('mouseout', function () { this.setStyle({ weight: 4, opacity: 0.8 }); });
+
+            const startM = L.circleMarker(coords[0], { radius: 5, color: '#10b981', fillOpacity: 1 }).addTo(map);
+            const endM = L.circleMarker(coords[coords.length - 1], { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
+
+            const dist = calculateDistance(coords);
+            activeLogs.set(filename, { polyline, markers: [startM, endM], coords, id: logId, color, dist });
+
+            updateUI();
+
+            // Auto-scale map to show all logs
+            const allBounds = Array.from(activeLogs.values()).map(l => l.polyline.getBounds());
+            if (allBounds.length > 0) {
+                const group = L.featureGroup(Array.from(activeLogs.values()).map(l => l.polyline));
+                map.fitBounds(group.getBounds(), { padding: [50, 50] });
+            }
+        }
+
+        function calculateDistance(coords) {
+            let total = 0;
+            for (let i = 0; i < coords.length - 1; i++) {
+                total += map.distance(coords[i], coords[i + 1]);
+            }
+            return total / 1000;
+        }
+
+        function updateUI() {
+            if (activeLogs.size === 0) {
+                logListDiv.innerHTML = '<div class="empty-state">Keine Logs geladen</div>';
+                statsSection.style.display = 'none';
+                return;
+            }
+
+            logListDiv.innerHTML = '';
+            statsSection.style.display = 'block';
+
+            let totalP = 0;
+            let totalD = 0;
+
+            activeLogs.forEach((log, filename) => {
+                totalP += log.coords.length;
+                totalD += log.dist;
+
+                const item = document.createElement('div');
+                item.className = 'log-item';
+                item.innerHTML = `
+                    <div class="log-info">
+                        <div class="log-name">
+                            <span class="log-color-indicator" style="background-color: ${log.color}"></span>
+                            ${filename}
+                        </div>
+                        <div class="log-meta">ID: ${log.id} | ${log.coords.length} Punkte</div>
+                    </div>
+                    <div class="delete-log" title="Löschen">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                        </svg>
+                    </div>
+                `;
+
+                item.querySelector('.delete-log').onclick = () => removeLog(filename);
+                item.onclick = (e) => {
+                    if (!e.target.closest('.delete-log')) {
+                        map.fitBounds(log.polyline.getBounds(), { padding: [50, 50] });
+                        log.polyline.openPopup();
+                    }
+                };
+
+                logListDiv.appendChild(item);
+            });
+
+            totalPointsEl.textContent = totalP;
+            totalDistEl.textContent = `${totalD.toFixed(2)} km`;
+        }
+
+        function removeLog(filename) {
+            const log = activeLogs.get(filename);
+            if (log) {
+                map.removeLayer(log.polyline);
+                log.markers.forEach(m => map.removeLayer(m));
+                activeLogs.delete(filename);
+                updateUI();
+            }
+        }
+
+        clearAllBtn.onclick = () => {
+            activeLogs.forEach((_, filename) => removeLog(filename));
+        };
+
+    </script>
+</body>
+
+</html>
