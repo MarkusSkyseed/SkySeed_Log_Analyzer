@@ -140,11 +140,38 @@
             justify-content: space-between;
             align-items: center;
             transition: all 0.2s;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .log-item:active {
+            cursor: grabbing;
         }
 
         .log-item:hover {
             border-color: var(--primary-color);
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .log-item.drag-over {
+            border-color: var(--primary-color);
+            background: #eff6ff;
+            transform: scale(1.01);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.18);
+        }
+
+        .log-item.dragging {
+            opacity: 0.4;
+        }
+
+        .drag-handle {
+            color: var(--text-muted);
+            cursor: grab;
+            padding: 2px 4px;
+            margin-right: 2px;
+            font-size: 14px;
+            line-height: 1;
+            flex-shrink: 0;
         }
 
         .log-info {
@@ -186,6 +213,43 @@
         .delete-log:hover {
             background-color: #fee2e2;
             color: var(--error-color);
+        }
+
+        .toggle-log {
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .toggle-log:hover {
+            background-color: #e0f2fe;
+            color: var(--primary-color);
+        }
+
+        .star-log {
+            color: #d1d5db;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .star-log:hover {
+            color: #f59e0b;
+        }
+
+        .star-log.starred {
+            color: #f59e0b;
+        }
+
+        .log-hidden {
+            opacity: 0.45;
+        }
+
+        .log-hidden .log-name {
+            text-decoration: line-through;
         }
 
         .empty-state {
@@ -263,6 +327,10 @@
                 <span class="label">Gesamtdistanz:</span>
                 <span class="value" id="total-dist">0.00 km</span>
             </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
+                <span class="label">Saatdistanz:</span>
+                <span class="value" id="total-seed-dist">0.00 km</span>
+            </div>
             <button id="clear-all" class="btn btn-ghost" style="width: 100%; margin-top: 1rem;">Alle löschen</button>
         </div>
     </div>
@@ -283,8 +351,17 @@
         L.control.layers({ "Straße": streetLayer, "Satelit": satelliteLayer }, null, { position: 'topleft' }).addTo(map);
 
         // State Management
-        const activeLogs = new Map(); // filename -> {polyline, markers, data, color}
-        const colors = ['#2563eb', '#d946ef', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#8b5cf6', '#ec4899'];
+        const activeLogs = new Map(); // filename -> {polylineGroup, markers, stats, colorSet}
+        const colors = [
+            { base: '#2563eb', light: '#93c5fd' }, // Blue
+            { base: '#d946ef', light: '#f5d0fe' }, // Magenta
+            { base: '#10b981', light: '#a7f3d0' }, // Emerald
+            { base: '#f59e0b', light: '#fde68a' }, // Amber
+            { base: '#ef4444', light: '#fecaca' }, // Red
+            { base: '#6366f1', light: '#c7d2fe' }, // Indigo
+            { base: '#8b5cf6', light: '#ddd6fe' }, // Violet
+            { base: '#ec4899', light: '#fbcfe8' }  // Pink
+        ];
         let colorIdx = 0;
 
         const fileInput = document.getElementById('file-input');
@@ -307,25 +384,20 @@
             const reader = new FileReader();
             reader.onload = function (event) {
                 try {
-                    const logData = JSON.parse(event.target.result);
-                    if (!Array.isArray(logData)) return;
+                    const rawData = JSON.parse(event.target.result);
+                    if (!Array.isArray(rawData)) return;
 
-                    const coordinates = [];
-                    let firstEntryId = "Unbekannt";
+                    const entries = rawData.map(p => typeof p === 'string' ? JSON.parse(p) : p)
+                        .filter(e => e.position && e.timestamp)
+                        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-                    logData.forEach((p, idx) => {
-                        try {
-                            const entry = typeof p === 'string' ? JSON.parse(p) : p;
-                            if (idx === 0 && entry.id) firstEntryId = entry.id;
-                            if (entry.position) coordinates.push([entry.position.latitude, entry.position.longitude]);
-                        } catch (e) { }
-                    });
+                    if (entries.length === 0) return;
 
-                    if (coordinates.length > 0) {
-                        const color = colors[colorIdx % colors.length];
-                        colorIdx++;
-                        addLogToMap(file.name, firstEntryId, coordinates, color);
-                    }
+                    const stats = calculateStats(entries);
+                    const colorSet = colors[colorIdx % colors.length];
+                    colorIdx++;
+
+                    addLogToMap(file.name, entries, stats, colorSet);
                 } catch (err) {
                     console.error("Fehler beim Verarbeiten von", file.name, err);
                 }
@@ -333,38 +405,154 @@
             reader.readAsText(file);
         }
 
-        function addLogToMap(filename, logId, coords, color) {
-            const polyline = L.polyline(coords, {
-                color: color,
-                weight: 4,
-                opacity: 0.8,
-                className: 'path-interactive'
-            }).addTo(map);
+        function calculateStats(entries) {
+            let armedTime = 0;
+            let missionTime = 0;
+            let seedingTime = 0;
+            let seedingDistanceM = 0;
+            let totalSpeedSetting = 0;
+            let seedingCount = 0;
+            let distance = 0;
 
-            polyline.bindPopup(`
-                <strong>Log-Details</strong><br>
-                <span style="color:${color}">●</span> Name: ${filename}<br>
-                ID: ${logId}<br>
-                Punkte: ${coords.length}
-            `);
+            for (let i = 0; i < entries.length - 1; i++) {
+                const curr = entries[i];
+                const next = entries[i + 1];
+                // timestamp may be a string like "2026-02-23 14:52:39.284898"
+                const dt = (new Date(next.timestamp) - new Date(curr.timestamp)) / 1000; // seconds
 
-            polyline.on('mouseover', function () { this.setStyle({ weight: 7, opacity: 1 }); });
-            polyline.on('mouseout', function () { this.setStyle({ weight: 4, opacity: 0.8 }); });
+                const armed = curr.drone ? curr.drone.armedState : curr.armedState;
+                const mode = curr.drone ? curr.drone.mode : curr.mode;
+                const isAutoMode = (mode === "Auto" || mode === "AUTO");
+                const isSeeding = curr.seeder && curr.seeder.status === "on";
+                const segDist = map.distance(
+                    [curr.position.latitude, curr.position.longitude],
+                    [next.position.latitude, next.position.longitude]
+                );
 
-            const startM = L.circleMarker(coords[0], { radius: 5, color: '#10b981', fillOpacity: 1 }).addTo(map);
-            const endM = L.circleMarker(coords[coords.length - 1], { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
+                if (armed === true || armed === "true") armedTime += dt;
+                if (isAutoMode) missionTime += dt;
+                // Saatzeit: only count when seeder is on AND in Auto mode
+                if (isSeeding && isAutoMode) {
+                    seedingTime += dt;
+                    seedingDistanceM += segDist;
+                    if (curr.seeder.speedSetting !== undefined) {
+                        totalSpeedSetting += Number(curr.seeder.speedSetting);
+                        seedingCount++;
+                    }
+                }
 
-            const dist = calculateDistance(coords);
-            activeLogs.set(filename, { polyline, markers: [startM, endM], coords, id: logId, color, dist });
+                distance += segDist;
+            }
+
+            return {
+                id: entries[0].id || "Unbekannt",
+                points: entries.length,
+                distance: distance / 1000,
+                seedingDistance: seedingDistanceM / 1000,
+                flugzeit: formatDuration(armedTime),
+                missionszeit: formatDuration(missionTime),
+                saatzeit: formatDuration(seedingTime),
+                prozentSaat: missionTime > 0 ? ((seedingTime / missionTime) * 100).toFixed(1) : 0,
+                rpm: seedingCount > 0 ? (totalSpeedSetting / seedingCount).toFixed(0) : 0
+            };
+        }
+
+        function formatDuration(seconds) {
+            let s = Math.abs(seconds);
+            // No heuristic needed — dt is always in seconds now
+            const mins = Math.floor(s / 60);
+            const secs = Math.floor(s % 60);
+            return `${mins}m ${secs}s`;
+        }
+
+        function addLogToMap(filename, entries, stats, colorSet) {
+            const group = L.featureGroup().addTo(map);
+
+            // Segment the path based on seeder status
+            let currentSegment = [entries[0]];
+            let currentStatus = (entries[0].seeder && entries[0].seeder.status === "on") ? "on" : "off";
+
+            for (let i = 1; i < entries.length; i++) {
+                const entry = entries[i];
+                const status = (entry.seeder && entry.seeder.status === "on") ? "on" : "off";
+
+                if (status === currentStatus) {
+                    currentSegment.push(entry);
+                } else {
+                    drawSegment(currentSegment, currentStatus, colorSet, group, filename, stats);
+                    currentSegment = [entries[i - 1], entry]; // overlap by one point for continuity
+                    currentStatus = status;
+                }
+            }
+            drawSegment(currentSegment, currentStatus, colorSet, group, filename, stats);
+
+            const startM = L.circleMarker([entries[0].position.latitude, entries[0].position.longitude],
+                { radius: 5, color: '#10b981', fillOpacity: 1 }).addTo(map);
+            const endM = L.circleMarker([entries[entries.length - 1].position.latitude, entries[entries.length - 1].position.longitude],
+                { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
+
+            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true });
 
             updateUI();
 
-            // Auto-scale map to show all logs
-            const allBounds = Array.from(activeLogs.values()).map(l => l.polyline.getBounds());
-            if (allBounds.length > 0) {
-                const group = L.featureGroup(Array.from(activeLogs.values()).map(l => l.polyline));
-                map.fitBounds(group.getBounds(), { padding: [50, 50] });
+            const allGroups = Array.from(activeLogs.values()).map(l => l.group);
+            if (allGroups.length > 0) {
+                const firstGroup = allGroups[0];
+                map.fitBounds(L.featureGroup(allGroups).getBounds(), { padding: [50, 50] });
             }
+        }
+
+        function drawSegment(points, status, colorSet, group, filename, stats) {
+            if (points.length < 2) return;
+
+            const latlngs = points.map(p => [p.position.latitude, p.position.longitude]);
+            const isSeeding = status === "on";
+
+            const polyline = L.polyline(latlngs, {
+                color: isSeeding ? colorSet.base : colorSet.light,
+                weight: isSeeding ? 5 : 3.5,
+                opacity: isSeeding ? 1 : 0.7,
+                smoothFactor: 1
+            }).addTo(group);
+
+            const popupContent = `
+                <div style="min-width: 180px">
+                    <strong style="color:${colorSet.base}">${filename}</strong><br>
+                    <small style="color:#64748b">ID: ${stats.id}</small>
+                    <hr style="margin: 8px 0; border: 0; border-top: 1px solid #eee;">
+                    <div style="display:grid; grid-template-columns: 1fr 1.2fr; gap: 4px; font-size: 11px;">
+                        <span>Flugzeit:</span> <strong>${stats.flugzeit}</strong>
+                        <span>Missionszeit:</span> <strong>${stats.missionszeit}</strong>
+                        <span>Saatzeit:</span> <strong>${stats.saatzeit}</strong>
+                        <span>Prozent Saatzeit:</span> <strong>${stats.prozentSaat}%</strong>
+                        <span>RPM:</span> <strong>${stats.rpm}</strong>
+                        <span>Distanz:</span> <strong>${stats.distance.toFixed(2)} km</strong>
+                        <span>Saatdistanz:</span> <strong>${stats.seedingDistance.toFixed(2)} km</strong>
+                    </div>
+                </div>
+            `;
+
+            polyline.bindPopup(popupContent);
+
+            polyline.on('mouseover', function () {
+                group.eachLayer(l => {
+                    if (l instanceof L.Polyline) {
+                        const isPrimary = l.options.color === colorSet.base;
+                        l.setStyle({ weight: isPrimary ? 8 : 6, opacity: 1 });
+                    }
+                });
+            });
+            polyline.on('mouseout', function () {
+                group.eachLayer(l => {
+                    if (l instanceof L.Polyline) {
+                        const isPrimary = l.options.color === colorSet.base;
+                        l.setStyle({
+                            weight: isPrimary ? 5 : 3.5,
+                            opacity: isPrimary ? 1 : 0.7
+                        });
+                    }
+                });
+            });
         }
 
         function calculateDistance(coords) {
@@ -387,33 +575,85 @@
 
             let totalP = 0;
             let totalD = 0;
+            let totalSD = 0;
 
             activeLogs.forEach((log, filename) => {
-                totalP += log.coords.length;
-                totalD += log.dist;
+                const isVisible = log.visible !== false;
+
+                // Only count visible logs in totals
+                if (isVisible) {
+                    totalP += log.stats.points;
+                    totalD += log.stats.distance;
+                    totalSD += log.stats.seedingDistance;
+                }
+
+                const isStarred = log.starred === true;
 
                 const item = document.createElement('div');
-                item.className = 'log-item';
+                item.className = 'log-item' + (isVisible ? '' : ' log-hidden');
+                item.draggable = true;
+                item.dataset.filename = filename;
+
                 item.innerHTML = `
-                    <div class="log-info">
+                    <span class="drag-handle" title="Verschieben">&#8942;</span>
+                    <div class="log-info" style="flex:1; min-width:0; margin:0 6px;">
                         <div class="log-name">
-                            <span class="log-color-indicator" style="background-color: ${log.color}"></span>
+                            <span class="log-color-indicator" style="background-color: ${log.colorSet.base}"></span>
                             ${filename}
                         </div>
-                        <div class="log-meta">ID: ${log.id} | ${log.coords.length} Punkte</div>
+                        <div class="log-meta">${log.stats.saatzeit} Saat | ${log.stats.seedingDistance.toFixed(2)} km Saatdist.</div>
                     </div>
-                    <div class="delete-log" title="Löschen">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-                        </svg>
+                    <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
+                        <div class="star-log${isStarred ? ' starred' : ''}" title="${isStarred ? 'Stern entfernen' : 'Favorit markieren'}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? '#f59e0b' : 'none'}" stroke="${isStarred ? '#f59e0b' : 'currentColor'}" stroke-width="2">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="toggle-log" title="${isVisible ? 'Ausblenden' : 'Einblenden'}">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                ${isVisible
+                        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'
+                        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line>'}
+                            </svg>
+                        </div>
+                        <div class="delete-log" title="Löschen">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
+                            </svg>
+                        </div>
                     </div>
                 `;
 
-                item.querySelector('.delete-log').onclick = () => removeLog(filename);
-                item.onclick = (e) => {
-                    if (!e.target.closest('.delete-log')) {
-                        map.fitBounds(log.polyline.getBounds(), { padding: [50, 50] });
-                        log.polyline.openPopup();
+                // Drag events
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', filename);
+                    setTimeout(() => item.classList.add('dragging'), 0);
+                });
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    logListDiv.querySelectorAll('.log-item').forEach(el => el.classList.remove('drag-over'));
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    logListDiv.querySelectorAll('.log-item').forEach(el => el.classList.remove('drag-over'));
+                    item.classList.add('drag-over');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    item.classList.remove('drag-over');
+                    const fromName = e.dataTransfer.getData('text/plain');
+                    if (fromName !== filename) reorderLogs(fromName, filename);
+                });
+
+                item.querySelector('.star-log').onclick = (e) => { e.stopPropagation(); toggleStar(filename); };
+                item.querySelector('.toggle-log').onclick = (e) => { e.stopPropagation(); toggleLog(filename); };
+                item.querySelector('.delete-log').onclick = (e) => { e.stopPropagation(); removeLog(filename); };
+                item.onclick = () => {
+                    if (isVisible) {
+                        map.fitBounds(log.group.getBounds(), { padding: [50, 50] });
+                        log.group.getLayers()[0].openPopup();
                     }
                 };
 
@@ -422,12 +662,44 @@
 
             totalPointsEl.textContent = totalP;
             totalDistEl.textContent = `${totalD.toFixed(2)} km`;
+            document.getElementById('total-seed-dist').textContent = `${totalSD.toFixed(2)} km`;
+        }
+
+        function reorderLogs(fromName, toName) {
+            const entries = Array.from(activeLogs.entries());
+            const fromIdx = entries.findIndex(([k]) => k === fromName);
+            const toIdx = entries.findIndex(([k]) => k === toName);
+            if (fromIdx === -1 || toIdx === -1) return;
+            const [moved] = entries.splice(fromIdx, 1);
+            entries.splice(toIdx, 0, moved);
+            activeLogs.clear();
+            entries.forEach(([k, v]) => activeLogs.set(k, v));
+            updateUI();
+        }
+
+        function toggleStar(filename) {
+            const log = activeLogs.get(filename);
+            if (log) { log.starred = !log.starred; updateUI(); }
+        }
+
+        function toggleLog(filename) {
+            const log = activeLogs.get(filename);
+            if (!log) return;
+            log.visible = !log.visible;
+            if (log.visible) {
+                log.group.addTo(map);
+                log.markers.forEach(m => m.addTo(map));
+            } else {
+                map.removeLayer(log.group);
+                log.markers.forEach(m => map.removeLayer(m));
+            }
+            updateUI();
         }
 
         function removeLog(filename) {
             const log = activeLogs.get(filename);
             if (log) {
-                map.removeLayer(log.polyline);
+                map.removeLayer(log.group);
                 log.markers.forEach(m => map.removeLayer(m));
                 activeLogs.delete(filename);
                 updateUI();
