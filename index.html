@@ -10,16 +10,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary-color: #3b82f6;
-            --primary-hover: #2563eb;
+            --primary-color: #10b981; /* Skyseed Green */
+            --primary-hover: #059669;
             --bg-light: #f8fafc;
             --card-bg: rgba(255, 255, 255, 0.95);
             --text-dark: #0f172a;
             --text-muted: #64748b;
-            --accent-color: #10b981;
+            --accent-color: #3b82f6;
             --error-color: #ef4444;
             --border-color: rgba(0, 0, 0, 0.08);
-            --header-gradient: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+            --header-gradient: linear-gradient(135deg, #064e3b 0%, #10b981 100%);
         }
 
         body {
@@ -66,16 +66,52 @@
             background: var(--card-bg);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            padding: 1rem;
+            padding: 0;
             border-radius: 1rem;
             border: 1px solid var(--border-color);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            width: 320px;
+            width: 340px;
             max-height: calc(100vh - 7rem);
             display: flex;
             flex-direction: column;
-            gap: 1.25rem;
+            overflow: hidden;
+        }
+
+        .tab-nav {
+            display: flex;
+            background: #f1f5f9;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            background: transparent;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-btn.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            background: white;
+        }
+
+        .tab-content {
+            padding: 1.25rem;
             overflow-y: auto;
+            display: none;
+            flex-direction: column;
+            gap: 1.25rem;
+        }
+
+        .tab-content.active {
+            display: flex;
         }
 
         .btn {
@@ -113,7 +149,126 @@
             color: var(--text-dark);
         }
 
-        #file-input {
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .form-group label {
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .form-control {
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.4rem;
+            font-family: inherit;
+            font-size: 0.85rem;
+            outline: none;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-color);
+        }
+
+        .seed-card {
+            background: white;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .seed-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .seed-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .calib-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .calib-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            padding: 4px 0;
+            border-top: 1px dashed #eee;
+        }
+
+        .result-box {
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-top: 0.5rem;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.1);
+        }
+
+        .result-title {
+            font-size: 0.625rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            color: #065f46;
+            margin-bottom: 0.25rem;
+            letter-spacing: 0.05em;
+        }
+
+        .result-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #065f46;
+        }
+
+        .plan-item {
+            background: white;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .plan-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .plan-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+        }
+
+        .badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-plan { background: #dcfce7; color: #166534; }
+        .badge-matched { background: #dbeafe; color: #1e40af; }
+
+        #file-input, #plan-input {
             display: none;
         }
 
@@ -348,35 +503,104 @@
     <div id="map"></div>
 
     <div class="side-panel">
-        <div class="log-section">
-            <label for="file-input" class="btn btn-primary" style="width: 100%; box-sizing: border-box;">
-                Logs hinzufügen
-            </label>
-            <input type="file" id="file-input" multiple accept=".json,.*">
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="showTab('logs')">Logs</button>
+            <button class="tab-btn" onclick="showTab('plan')">Planung</button>
+            <button class="tab-btn" onclick="showTab('seeds')">Saatgut</button>
         </div>
 
-        <div class="log-section">
-            <h2>Geladene Logs</h2>
-            <div id="log-list" class="log-list">
-                <div class="empty-state">Keine Logs geladen</div>
+        <!-- LOGS TAB -->
+        <div id="tab-logs" class="tab-content active">
+            <div class="log-section">
+                <label for="file-input" class="btn btn-primary" style="width: 100%; box-sizing: border-box;">
+                    Logs hinzufügen
+                </label>
+                <input type="file" id="file-input" multiple accept=".json,.*">
+            </div>
+
+            <div class="log-section">
+                <h2>Geladene Logs</h2>
+                <div id="log-list" class="log-list">
+                    <div class="empty-state">Keine Logs geladen</div>
+                </div>
+            </div>
+
+            <div id="stats-section" class="log-section"
+                style="display: none; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                    <span class="label">Gesamtpunkte:</span>
+                    <span class="value" id="total-points">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
+                    <span class="label">Gesamtdistanz:</span>
+                    <span class="value" id="total-dist">0.00 km</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
+                    <span class="label">Saatdistanz:</span>
+                    <span class="value" id="total-seed-dist">0.00 km</span>
+                </div>
+                <button id="clear-all" class="btn btn-ghost" style="width: 100%; margin-top: 1rem;">Alle löschen</button>
             </div>
         </div>
 
-        <div id="stats-section" class="log-section"
-            style="display: none; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
-                <span class="label">Gesamtpunkte:</span>
-                <span class="value" id="total-points">0</span>
+        <!-- PLANNING TAB -->
+        <div id="tab-plan" class="tab-content">
+            <div class="form-group">
+                <label for="plan-input-label">Missionsplan (.plan)</label>
+                <label for="plan-input" class="btn btn-primary" style="width: 100%; box-sizing: border-box;">
+                    .plan hochladen
+                </label>
+                <input type="file" id="plan-input" accept=".plan">
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
-                <span class="label">Gesamtdistanz:</span>
-                <span class="value" id="total-dist">0.00 km</span>
+
+            <div id="active-plan-info" style="display:none;">
+                <div class="plan-item">
+                    <div class="plan-title">
+                        <span id="plan-name-display">Unbenannt</span>
+                        <span class="badge badge-plan">AKTIV</span>
+                    </div>
+                    <div class="plan-meta" id="plan-meta-display">
+                        Distanz: 0m | Speed: 0m/s | Zeit: 0s
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top:1rem;">
+                    <label>Saatgut & Zielmenge</label>
+                    <select id="calc-seed-select" class="form-control" onchange="calculateRequirement()"></select>
+                    <input type="number" id="calc-target-grams" class="form-control" placeholder="Gramm gesamt" oninput="calculateRequirement()">
+                </div>
+
+                <div id="calc-result" class="result-box" style="display:none;">
+                    <div class="result-title">Empfohlene Einstellung</div>
+                    <div class="result-value"><span id="res-rpm">--</span> RPM</div>
+                    <div style="font-size: 0.7rem; color: #065f46; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 2px;">
+                        <div>Flow: <span id="res-flow">0</span> g/min | Total: <span id="res-mass">0</span>g</div>
+                        <div id="res-warning" style="color:var(--error-color); font-weight:600; display:none;">⚠️ Wert extrapoliert!</div>
+                        <div style="font-weight: 700; margin-top: 4px; border-top: 1px dashed rgba(6, 95, 70, 0.2); padding-top: 4px;">
+                            Bedarf: <span id="res-flights">1</span> Flug/Flüge 
+                            <small id="res-load-info" style="font-weight: 400; opacity: 0.8;"></small>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.25rem;">
-                <span class="label">Saatdistanz:</span>
-                <span class="value" id="total-seed-dist">0.00 km</span>
+
+            <div class="log-section">
+                <h2>Verknüpfte Logs</h2>
+                <div id="matched-logs-list" class="log-list">
+                    <div class="empty-state">Kein Plan aktiv</div>
+                </div>
             </div>
-            <button id="clear-all" class="btn btn-ghost" style="width: 100%; margin-top: 1rem;">Alle löschen</button>
+        </div>
+
+        <!-- SEED DATABASE TAB -->
+        <div id="tab-seeds" class="tab-content">
+            <div style="display:flex; justify-content: space-between; align-items: center;">
+                <h2 style="margin:0; font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted);">Baumsaat Posten</h2>
+                <button class="btn btn-primary" style="padding: 4px 10px; font-size: 11px;" onclick="addNewSeed()">Neu</button>
+            </div>
+            <div id="seed-list" class="log-list">
+                <!-- Seed cards go here -->
+            </div>
         </div>
     </div>
 
@@ -397,19 +621,43 @@
 
         // State Management
         const activeLogs = new Map(); // filename -> {polylineGroup, markers, stats, colorSet}
-        const colors = [
-            { base: '#2563eb', light: '#93c5fd' }, // Blue
-            { base: '#d946ef', light: '#f5d0fe' }, // Magenta
-            { base: '#10b981', light: '#a7f3d0' }, // Emerald
-            { base: '#f59e0b', light: '#fde68a' }, // Amber
-            { base: '#ef4444', light: '#fecaca' }, // Red
-            { base: '#6366f1', light: '#c7d2fe' }, // Indigo
-            { base: '#8b5cf6', light: '#ddd6fe' }, // Violet
-            { base: '#ec4899', light: '#fbcfe8' }  // Pink
-        ];
+        let activePlan = null;
         let colorIdx = 0;
+        const colors = [
+            { base: '#10b981', light: '#a7f3d0' }, // Skyseed Green
+            { base: '#3b82f6', light: '#93c5fd' }, // Blue
+            { base: '#d946ef', light: '#f5d0fe' }, // Magenta
+            { base: '#f59e0b', light: '#fde68a' }, // Amber
+            { base: '#ef4444', light: '#fecaca' }
+        ];
 
+        const AVAILABLE_RPMS = [1, 2, 3, 4, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
+
+        function findClosestRPM(target) {
+            return AVAILABLE_RPMS.reduce((prev, curr) => 
+                Math.abs(curr - target) < Math.abs(prev - target) ? curr : prev
+            );
+        }
+
+        // Seed database (Persist in localStorage)
+        let seedDatabase = [];
+        try {
+            const stored = localStorage.getItem('skyseed_seeds');
+            if (stored) seedDatabase = JSON.parse(stored);
+        } catch (e) {
+            console.error("Error loading seeds:", e);
+        }
+        
+        if (!seedDatabase || seedDatabase.length === 0) {
+            seedDatabase = [
+                { id: 1, name: "Eiche", calib: [{ rpm: 100, gpm: 80 }, { rpm: 200, gpm: 170 }] },
+                { id: 2, name: "Buche", calib: [{ rpm: 100, gpm: 120 }, { rpm: 200, gpm: 250 }] }
+            ];
+        }
+
+        // UI Elements
         const fileInput = document.getElementById('file-input');
+        const planInput = document.getElementById('plan-input');
         const logListDiv = document.getElementById('log-list');
         const statsSection = document.getElementById('stats-section');
         const totalPointsEl = document.getElementById('total-points');
@@ -417,557 +665,374 @@
         const clearAllBtn = document.getElementById('clear-all');
         const statusDisplay = document.getElementById('status-display');
 
-        fileInput.addEventListener('change', async function (e) {
-            const files = Array.from(e.target.files);
-            for (const file of files) {
-                if (activeLogs.has(file.name)) continue;
-                await processFile(file);
+        // Helpers
+        function showStatus(msg, timeout = 3000) {
+            statusDisplay.textContent = msg;
+            if (timeout > 0) setTimeout(() => statusDisplay.textContent = 'Bereit', timeout);
+        }
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.querySelector(`.tab-btn[onclick="showTab('${tabId}')"]`).classList.add('active');
+        }
+
+        function getPos(p) {
+            if (!p || !p.position) return null;
+            const lat = p.position.lat !== undefined ? p.position.lat : p.position.latitude;
+            const lng = p.position.long !== undefined ? p.position.long : (p.position.longitude !== undefined ? p.position.longitude : p.position.lng);
+            if (lat === undefined || lng === undefined) return null;
+            return [lat, lng];
+        }
+
+        // --- SEED MANAGEMENT ---
+        function saveSeeds() {
+            localStorage.setItem('skyseed_seeds', JSON.stringify(seedDatabase));
+            updateSeedUI();
+            updateSeedSelects();
+            calculateRequirement(); // Update planning results if data changed
+        }
+
+        function updateSeedUI() {
+            const list = document.getElementById('seed-list');
+            if (!list) return;
+            list.innerHTML = '';
+            seedDatabase.forEach(seed => {
+                const card = document.createElement('div');
+                card.className = 'seed-card';
+                card.innerHTML = `
+                    <div class="seed-header">
+                        <span class="seed-title">${seed.name}</span>
+                        <div class="delete-log" onclick="deleteSeed('${seed.id}')" title="Löschen">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
+                        </div>
+                    </div>
+                    <div class="calib-list">
+                        ${seed.calib.map((c, idx) => `
+                            <div class="calib-row">
+                                <span>${c.rpm} RPM ➔ ${c.gpm} g/min</span>
+                                <span style="cursor:pointer; color:var(--error-color); font-weight:bold; padding: 0 4px;" onclick="removeCalib('${seed.id}', ${idx})">×</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div style="display:flex; gap:4px; margin-top:8px;">
+                        <input type="number" id="new-rpm-${seed.id}" class="form-control" placeholder="RPM" style="flex:1; padding:4px; font-size:11px;" onkeydown="if(event.key==='Enter') addCalib('${seed.id}')">
+                        <input type="number" id="new-gpm-${seed.id}" class="form-control" placeholder="g/min" style="flex:1; padding:4px; font-size:11px;" onkeydown="if(event.key==='Enter') addCalib('${seed.id}')">
+                        <button class="btn btn-primary" style="padding:4px 8px; font-size:10px;" onclick="addCalib('${seed.id}')">Add</button>
+                    </div>
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        function updateSeedSelects() {
+            const s = document.getElementById('calc-seed-select');
+            if (!s) return;
+            const current = s.value;
+            s.innerHTML = '<option value="">-- Saatgut wählen --</option>';
+            seedDatabase.forEach(seed => {
+                const opt = document.createElement('option');
+                opt.value = seed.id;
+                opt.textContent = seed.name;
+                if (seed.id == current) opt.selected = true;
+                s.appendChild(opt);
+            });
+        }
+
+        function addNewSeed() {
+            const name = prompt("Name des Saatguts:");
+            if (!name) return;
+            const id = "seed_" + Date.now();
+            seedDatabase.push({ id, name, calib: [] });
+            saveSeeds();
+        }
+
+        function deleteSeed(id) {
+            if (confirm("Dieses Saatgut wirklich löschen?")) {
+                seedDatabase = seedDatabase.filter(s => s.id != id);
+                saveSeeds();
+            }
+        }
+
+        function addCalib(id) {
+            const rInput = document.getElementById(`new-rpm-${id}`);
+            const gInput = document.getElementById(`new-gpm-${id}`);
+            const r = parseInt(rInput.value);
+            const g = parseInt(gInput.value);
+            
+            if (isNaN(r) || isNaN(g)) {
+                alert("Bitte gültige Zahlen für RPM und g/min eingeben.");
+                return;
+            }
+            
+            const s = seedDatabase.find(x => x.id == id);
+            if (s) {
+                s.calib.push({ rpm: r, gpm: g });
+                s.calib.sort((a, b) => a.rpm - b.rpm);
+                rInput.value = '';
+                gInput.value = '';
+                saveSeeds();
+            }
+        }
+
+        function removeCalib(seedId, index) {
+            const s = seedDatabase.find(x => x.id == seedId);
+            if (s) {
+                s.calib.splice(index, 1);
+                saveSeeds();
+            }
+        }
+
+        // --- PLAN PROCESSING ---
+        planInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const text = await file.text();
+            const data = JSON.parse(text);
+            if (!data.mission) return;
+
+            let dist = 0, latlngs = [];
+            data.mission.items.forEach((item, i) => {
+                if (item.params[4] && item.params[5]) {
+                    const pos = [item.params[4], item.params[5]];
+                    if (latlngs.length > 0) dist += map.distance(latlngs[latlngs.length - 1], pos);
+                    latlngs.push(pos);
+                }
+            });
+
+            const speed = data.mission.hoverSpeed || 5;
+            activePlan = { name: file.name, dist, speed, time: dist / speed, bounds: L.latLngBounds(latlngs), latlngs };
+
+            document.getElementById('plan-name-display').textContent = file.name;
+            document.getElementById('plan-meta-display').textContent = `Distanz: ${Math.round(dist)}m | Speed: ${speed}m/s | Zeit: ${Math.round(dist / speed)}s`;
+            document.getElementById('active-plan-info').style.display = 'block';
+
+            if (window.planLayer) map.removeLayer(window.planLayer);
+            window.planLayer = L.polyline(latlngs, { color: '#64748b', dashArray: '5, 10', weight: 2 }).addTo(map);
+            map.fitBounds(activePlan.bounds, { padding: [50, 50] });
+
+            calculateRequirement();
+            matchLogsToPlan();
+            showStatus("Plan geladen");
+        });
+
+        function calculateRequirement() {
+            const resBox = document.getElementById('calc-result');
+            if (!resBox) return;
+
+            if (!activePlan || !activePlan.time || activePlan.time <= 0) {
+                resBox.style.display = 'block';
+                resBox.innerHTML = '<div class="result-title">Hinweis</div><div style="font-size:0.8rem; color:var(--text-muted);">Bitte zuerst einen gültigen Missionsplan (.plan) laden.</div>';
+                return;
+            }
+            
+            const seedId = document.getElementById('calc-seed-select').value;
+            const grams = parseFloat(document.getElementById('calc-target-grams').value);
+            
+            if (!seedId) {
+                resBox.style.display = 'block';
+                resBox.innerHTML = '<div class="result-title">Hinweis</div><div style="font-size:0.8rem; color:var(--text-muted);">Bitte Baumart auswählen.</div>';
+                return;
+            }
+
+            if (isNaN(grams) || grams <= 0) {
+                resBox.style.display = 'block';
+                resBox.innerHTML = '<div class="result-title">Hinweis</div><div style="font-size:0.8rem; color:var(--text-muted);">Bitte Zielgewicht in Gramm eingeben.</div>';
+                return;
+            }
+
+            const seed = seedDatabase.find(s => s.id == seedId);
+            if (!seed || !seed.calib || seed.calib.length === 0) {
+                resBox.style.display = 'block';
+                resBox.innerHTML = '<div class="result-title">Hinweis</div><div style="font-size:0.8rem; color:#991b1b;">Keine Kalibrierungswerte für dieses Saatgut vorhanden. Bitte im Tab "Saatgut" hinzufügen.</div>';
+                return;
+            }
+
+            // Restore original result box structure if it was overwritten by the hint
+            resBox.innerHTML = `
+                <div class="result-title">Empfohlene Einstellung</div>
+                <div class="result-value"><span id="res-rpm">--</span> RPM</div>
+                <div style="font-size: 0.7rem; color: #065f46; margin-top: 0.25rem; display: flex; flex-direction: column; gap: 2px;">
+                    <div id="res-ideal-info" style="opacity: 0.8; font-style: italic; margin-bottom: 4px;">Idealwert: <span id="res-rpm-ideal">--</span> RPM</div>
+                    <div>Flow: <span id="res-flow">0</span> g/min | Total: <span id="res-mass">0</span>g</div>
+                    <div id="res-warning" style="color:var(--error-color); font-weight:600; display:none;">⚠️ Wert extrapoliert!</div>
+                    <div style="font-weight: 700; margin-top: 4px; border-top: 1px dashed rgba(6, 95, 70, 0.2); padding-top: 4px;">
+                        Bedarf: <span id="res-flights">1</span> Flug/Flüge 
+                        <small id="res-load-info" style="font-weight: 400; opacity: 0.8;"></small>
+                    </div>
+                </div>
+            `;
+
+            const MAX_LOAD = 15000; // 15kg
+            const flights = Math.ceil(grams / MAX_LOAD);
+            const gramsPerFlight = grams / flights;
+
+            const gpmReq = grams / (activePlan.time / 60);
+            const cal = [...seed.calib].sort((a, b) => a.gpm - b.gpm);
+            let idealRPM = 0;
+            let extrapolated = false;
+
+            if (gpmReq <= cal[0].gpm) {
+                idealRPM = (gpmReq / cal[0].gpm) * cal[0].rpm;
+                extrapolated = true;
+            } else if (gpmReq >= cal[cal.length - 1].gpm) {
+                const last = cal[cal.length - 1];
+                idealRPM = (gpmReq / last.gpm) * last.rpm;
+                extrapolated = true;
+            } else {
+                for (let i = 0; i < cal.length - 1; i++) {
+                    if (gpmReq >= cal[i].gpm && gpmReq <= cal[i + 1].gpm) {
+                        const r = (gpmReq - cal[i].gpm) / (cal[i + 1].gpm - cal[i].gpm);
+                        idealRPM = cal[i].rpm + r * (cal[i + 1].rpm - cal[i].rpm);
+                        break;
+                    }
+                }
+            }
+
+            const recommendedRPM = findClosestRPM(idealRPM);
+
+            document.getElementById('res-rpm').textContent = recommendedRPM;
+            document.getElementById('res-rpm-ideal').textContent = idealRPM.toFixed(1);
+            document.getElementById('res-flow').textContent = gpmReq.toFixed(1);
+            document.getElementById('res-mass').textContent = grams;
+            document.getElementById('res-flights').textContent = flights;
+            document.getElementById('res-warning').style.display = extrapolated ? 'block' : 'none';
+            
+            const loadInfo = flights > 1 
+                ? `(ca. ${(gramsPerFlight/1000).toFixed(1)}kg pro Start)` 
+                : `(${(grams/1000).toFixed(1)}kg Ladung)`;
+            document.getElementById('res-load-info').textContent = loadInfo;
+            
+            resBox.style.display = 'block';
+        }
+
+        function matchLogsToPlan() {
+            const list = document.getElementById('matched-logs-list');
+            if (!activePlan) { list.innerHTML = '<div class="empty-state">Kein Plan</div>'; return; }
+            const matches = [];
+            activeLogs.forEach((log, name) => {
+                if (activePlan.bounds.intersects(log.group.getBounds().pad(0.1))) matches.push({ name, log });
+            });
+            list.innerHTML = matches.length ? '' : '<div class="empty-state">Keine Matches</div>';
+            matches.forEach(m => {
+                const el = document.createElement('div');
+                el.className = 'plan-item';
+                el.style.cursor = 'pointer';
+                el.innerHTML = `<div class="plan-title">${m.name} <span class="badge badge-matched">MATCH</span></div>`;
+                el.onclick = () => { showTab('logs'); map.fitBounds(m.log.group.getBounds()); };
+                list.appendChild(el);
+            });
+        }
+
+        // --- LOG PROCESSING ---
+        fileInput.addEventListener('change', async (e) => {
+            for (const file of e.target.files) {
+                if (!activeLogs.has(file.name)) await processFile(file);
             }
             fileInput.value = '';
         });
 
         async function processFile(file) {
             try {
-                // Try to get a FileSystemHandle if available (Chromium API)
-                let fileHandle = null;
-                if (typeof file.getFileSystemHandle === 'function') {
-                    try {
-                        fileHandle = await file.getFileSystemHandle();
-                    } catch (err) {
-                        // ignore permission errors
-                        fileHandle = null;
-                    }
-                }
-
                 const text = await file.text();
-                const rawData = JSON.parse(text);
-                if (!Array.isArray(rawData)) return;
-
-                const entries = rawData.map(p => typeof p === 'string' ? JSON.parse(p) : p)
+                const raw = JSON.parse(text);
+                const entries = raw.map(p => typeof p === 'string' ? JSON.parse(p) : p)
                     .filter(e => e.position && e.timestamp)
                     .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
-                if (entries.length === 0) return;
-
+                if (!entries.length) return;
                 const stats = calculateStats(entries);
-                const colorSet = colors[colorIdx % colors.length];
-                colorIdx++;
-
-                addLogToMap(file.name, entries, stats, colorSet, fileHandle, text);
-            } catch (err) {
-                console.error("Fehler beim Verarbeiten von", file.name, err);
-            }
+                const colorSet = colors[colorIdx++ % colors.length];
+                addLogToMap(file.name, entries, stats, colorSet);
+            } catch (err) { console.error(err); }
         }
 
         function calculateStats(entries) {
-            let armedTime = 0;
-            let missionTime = 0;
-            let seedingTime = 0;
-            let seedingDistanceM = 0;
-            let totalSpeedSetting = 0;
-            let seedingCount = 0;
-            let distance = 0;
-
+            let dist = 0, seedDist = 0, seedTime = 0, totalRpm = 0, seedCount = 0;
             for (let i = 0; i < entries.length - 1; i++) {
-                const curr = entries[i];
-                const next = entries[i + 1];
-                // timestamp may be a string like "2026-02-23 14:52:39.284898"
-                const dt = (new Date(next.timestamp) - new Date(curr.timestamp)) / 1000; // seconds
-
-                const armed = curr.drone ? curr.drone.armedState : curr.armedState;
-                const mode = curr.drone ? curr.drone.mode : curr.mode;
-                const isAutoMode = (mode === "Auto" || mode === "AUTO");
-                const isSeeding = curr.seeder && curr.seeder.status === "on";
-                const segDist = map.distance(
-                    [curr.position.latitude, curr.position.longitude],
-                    [next.position.latitude, next.position.longitude]
-                );
-
-                if (armed === true || armed === "true") armedTime += dt;
-                if (isAutoMode) missionTime += dt;
-                // Saatzeit: only count when seeder is on AND in Auto mode
-                if (isSeeding && isAutoMode) {
-                    seedingTime += dt;
-                    seedingDistanceM += segDist;
-                    if (curr.seeder.speedSetting !== undefined) {
-                        totalSpeedSetting += Number(curr.seeder.speedSetting);
-                        seedingCount++;
-                    }
+                const c = entries[i], n = entries[i + 1];
+                const p1 = getPos(c), p2 = getPos(n);
+                if (!p1 || !p2) continue;
+                const d = map.distance(p1, p2);
+                dist += d;
+                const mode = (c.drone?.mode || c.mode || "").toUpperCase();
+                const seeding = c.seeder?.status === "on";
+                if (seeding && mode === "AUTO") {
+                    seedDist += d;
+                    seedTime += (new Date(n.timestamp) - new Date(c.timestamp)) / 1000;
+                    const rpm = c.seeder?.rpm || c.seeder?.speedSetting;
+                    if (rpm) { totalRpm += Number(rpm); seedCount++; }
                 }
-
-                distance += segDist;
             }
-
-            return {
-                id: entries[0].id || "Unbekannt",
-                points: entries.length,
-                distance: distance / 1000,
-                seedingDistance: seedingDistanceM / 1000,
-                flugzeit: formatDuration(armedTime),
-                missionszeit: formatDuration(missionTime),
-                saatzeit: formatDuration(seedingTime),
-                prozentSaat: missionTime > 0 ? ((seedingTime / missionTime) * 100).toFixed(1) : 0,
-                rpm: seedingCount > 0 ? (totalSpeedSetting / seedingCount).toFixed(0) : 0
-            };
+            return { dist: dist / 1000, seedDist: seedDist / 1000, seedTime, rpm: seedCount ? totalRpm / seedCount : 0 };
         }
 
-        function formatDuration(seconds) {
-            let s = Math.abs(seconds);
-            // No heuristic needed — dt is always in seconds now
-            const mins = Math.floor(s / 60);
-            const secs = Math.floor(s % 60);
-            return `${mins}m ${secs}s`;
-        }
-
-        function addLogToMap(filename, entries, stats, colorSet, fileHandle = null, rawText = null) {
+        function addLogToMap(name, entries, stats, colorSet) {
             const group = L.featureGroup().addTo(map);
-
-            // Segment the path based on seeder status
-            let currentSegment = [entries[0]];
-            let currentStatus = (entries[0].seeder && entries[0].seeder.status === "on") ? "on" : "off";
+            let seg = [entries[0]], status = entries[0].seeder?.status === "on" ? "on" : "off";
 
             for (let i = 1; i < entries.length; i++) {
-                const entry = entries[i];
-                const status = (entry.seeder && entry.seeder.status === "on") ? "on" : "off";
-
-                if (status === currentStatus) {
-                    currentSegment.push(entry);
-                } else {
-                    drawSegment(currentSegment, currentStatus, colorSet, group, filename, stats);
-                    currentSegment = [entries[i - 1], entry]; // overlap by one point for continuity
-                    currentStatus = status;
-                }
-            }
-            drawSegment(currentSegment, currentStatus, colorSet, group, filename, stats);
-
-            const startM = L.circleMarker([entries[0].position.latitude, entries[0].position.longitude],
-                { radius: 5, color: '#10b981', fillOpacity: 1 }).addTo(map);
-            const endM = L.circleMarker([entries[entries.length - 1].position.latitude, entries[entries.length - 1].position.longitude],
-                { radius: 5, color: '#ef4444', fillOpacity: 1 }).addTo(map);
-
-            activeLogs.set(filename, { group, markers: [startM, endM], stats, colorSet, visible: true, entries, fileHandle, rawText, originalName: filename });
-
-            updateUI();
-
-            const allGroups = Array.from(activeLogs.values()).map(l => l.group);
-            if (allGroups.length > 0) {
-                const firstGroup = allGroups[0];
-                map.fitBounds(L.featureGroup(allGroups).getBounds(), { padding: [50, 50] });
-            }
-        }
-
-        // Show status messages in header
-        function showStatus(msg, timeout = 3000) {
-            if (!statusDisplay) return;
-            statusDisplay.textContent = msg;
-            if (timeout > 0) setTimeout(() => statusDisplay.textContent = 'Bereit', timeout);
-        }
-
-        // Start an inline rename flow for a log item
-        function startRename(oldName, itemEl) {
-            const log = activeLogs.get(oldName);
-            if (!log) return;
-            const nameDiv = itemEl.querySelector('.log-name');
-            // Temporarily disable dragging for this item
-            itemEl.draggable = false;
-            
-            // Create container for rename UI
-            const container = document.createElement('div');
-            container.style.display = 'flex';
-            container.style.flexDirection = 'column';
-            container.style.gap = '8px';
-            container.style.width = '100%';
-            container.style.padding = '4px 0';
-
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = oldName;
-            input.style.width = '100%';
-            input.style.boxSizing = 'border-box';
-            input.style.fontWeight = '600';
-            input.style.padding = '6px';
-            input.style.borderRadius = '4px';
-            input.style.border = '1px solid var(--primary-color)';
-
-            const actions = document.createElement('div');
-            actions.style.display = 'flex';
-            actions.style.gap = '6px';
-            actions.style.justifyContent = 'flex-end';
-
-            const saveBtn = document.createElement('button');
-            saveBtn.className = 'btn btn-primary';
-            saveBtn.textContent = 'Speichern';
-            saveBtn.style.padding = '4px 12px';
-            saveBtn.style.fontSize = '0.75rem';
-
-            const cancelBtn = document.createElement('button');
-            cancelBtn.className = 'btn btn-ghost';
-            cancelBtn.textContent = 'Abbrechen';
-            cancelBtn.style.padding = '4px 12px';
-            cancelBtn.style.fontSize = '0.75rem';
-
-            actions.appendChild(cancelBtn);
-            actions.appendChild(saveBtn);
-            container.appendChild(input);
-            container.appendChild(actions);
-
-            nameDiv.innerHTML = '';
-            nameDiv.appendChild(container);
-
-            input.focus();
-            input.select(); // auto-select text for easier editing
-
-            cancelBtn.onclick = (e) => { e.stopPropagation(); updateUI(); };
-            saveBtn.onclick = async (e) => {
-                e.stopPropagation();
-                const newName = input.value.trim();
-                if (!newName) { showStatus('Ungültiger Name', 2000); return; }
-                await renameLog(oldName, newName);
-            };
-            
-            // Handle Enter key
-            input.onkeydown = (e) => {
-                if (e.key === 'Enter') saveBtn.click();
-                if (e.key === 'Escape') cancelBtn.click();
-            };
-        }
-
-        async function renameLog(oldName, newName) {
-            if (oldName === newName) return updateUI();
-            if (activeLogs.has(newName)) { showStatus('Name existiert bereits', 3000); return; }
-
-            const log = activeLogs.get(oldName);
-            if (!log) return;
-
-            // Update map state key
-            const prevOriginal = log.originalName || oldName;
-            activeLogs.delete(oldName);
-            log.originalName = newName;
-            activeLogs.set(newName, log);
-            updateUI();
-
-            // Try to save back to filesystem
-            const content = typeof log.rawText === 'string' ? log.rawText : JSON.stringify(log.entries, null, 2);
-
-            // If we have a FileSystemFileHandle and the name did not change, overwrite
-            try {
-                if (log.fileHandle && typeof log.fileHandle.createWritable === 'function') {
-                    // If filename didn't change compared to original, overwrite the original file via handle.
-                    if (newName === prevOriginal) {
-                        const w = await log.fileHandle.createWritable();
-                        await w.write(content);
-                        await w.close();
-                        showStatus('Datei überschrieben', 2500);
-                        return;
-                    }
-                }
-
-                // Otherwise ask user where to save (Save As) if API available
-                if (window.showSaveFilePicker) {
-                    const handle = await window.showSaveFilePicker({
-                        suggestedName: newName,
-                        types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-                    });
-                    const writable = await handle.createWritable();
-                    await writable.write(content);
-                    await writable.close();
-                    // store new handle for future overwrites
-                    log.fileHandle = handle;
-                    showStatus('Datei gespeichert (neuer Speicherort)', 3000);
-                    return;
-                }
-
-                // Fallback: trigger download
-                const blob = new Blob([content], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = newName;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                URL.revokeObjectURL(url);
-                showStatus('Datei als Download gespeichert', 3000);
-            } catch (err) {
-                console.error('Fehler beim Speichern:', err);
-                showStatus('Fehler beim Speichern', 3000);
-            }
-        }
-
-        function highlightLog(filename, on) {
-            const log = activeLogs.get(filename);
-            if (!log || log.visible === false) return;
-            log.group.eachLayer(l => {
-                if (l instanceof L.Polyline) {
-                    const isPrimary = l.options.color === log.colorSet.base;
-                    l.setStyle(on
-                        ? { weight: isPrimary ? 8 : 6, opacity: 1 }
-                        : { weight: isPrimary ? 5 : 3.5, opacity: isPrimary ? 1 : 0.7 }
-                    );
-                }
-            });
-        }
-
-        function recolorLog(filename) {
-            const log = activeLogs.get(filename);
-            if (!log || !log.entries) return;
-            const h = Math.floor(Math.random() * 360);
-            const newColorSet = {
-                base: `hsl(${h}, 80%, 42%)`,
-                light: `hsl(${h}, 40%, 65%)`
-            };
-            log.colorSet = newColorSet;
-            log.group.clearLayers();
-            // Redraw segments with new color
-            let seg = [log.entries[0]];
-            let curStatus = (log.entries[0].seeder && log.entries[0].seeder.status === 'on') ? 'on' : 'off';
-            for (let i = 1; i < log.entries.length; i++) {
-                const e = log.entries[i];
-                const s = (e.seeder && e.seeder.status === 'on') ? 'on' : 'off';
-                if (s === curStatus) { seg.push(e); }
+                const s = entries[i].seeder?.status === "on" ? "on" : "off";
+                if (s === status) seg.push(entries[i]);
                 else {
-                    drawSegment(seg, curStatus, newColorSet, log.group, filename, log.stats);
-                    seg = [log.entries[i - 1], e];
-                    curStatus = s;
+                    drawSegment(seg, status, colorSet, group);
+                    seg = [entries[i - 1], entries[i]];
+                    status = s;
                 }
             }
-            drawSegment(seg, curStatus, newColorSet, log.group, filename, log.stats);
+            drawSegment(seg, status, colorSet, group);
+
+            const p1 = getPos(entries[0]), p2 = getPos(entries[entries.length - 1]);
+            const m1 = p1 ? L.circleMarker(p1, { radius: 4, color: '#10b981', fillOpacity: 1 }).addTo(map) : null;
+            const m2 = p2 ? L.circleMarker(p2, { radius: 4, color: '#ef4444', fillOpacity: 1 }).addTo(map) : null;
+
+            activeLogs.set(name, { group, markers: [m1, m2].filter(m => m), stats, colorSet, entries });
             updateUI();
+            matchLogsToPlan();
+            map.fitBounds(group.getBounds());
         }
 
-        function drawSegment(points, status, colorSet, group, filename, stats) {
-            if (points.length < 2) return;
-
-            const latlngs = points.map(p => [p.position.latitude, p.position.longitude]);
-            const isSeeding = status === "on";
-
-            const polyline = L.polyline(latlngs, {
-                color: isSeeding ? colorSet.base : colorSet.light,
-                weight: isSeeding ? 5 : 3.5,
-                opacity: isSeeding ? 1 : 0.7,
-                smoothFactor: 1
+        function drawSegment(pts, status, colors, group) {
+            if (pts.length < 2) return;
+            const latlngs = pts.map(p => getPos(p)).filter(p => p);
+            L.polyline(latlngs, {
+                color: status === "on" ? colors.base : colors.light,
+                weight: status === "on" ? 5 : 3,
+                opacity: status === "on" ? 1 : 0.6
             }).addTo(group);
-
-            const popupContent = `
-                <div style="min-width: 180px">
-                    <strong style="color:${colorSet.base}">${filename}</strong><br>
-                    <small style="color:#64748b">ID: ${stats.id}</small>
-                    <hr style="margin: 8px 0; border: 0; border-top: 1px solid #eee;">
-                    <div style="display:grid; grid-template-columns: 1fr 1.2fr; gap: 4px; font-size: 11px;">
-                        <span>Flugzeit:</span> <strong>${stats.flugzeit}</strong>
-                        <span>Missionszeit:</span> <strong>${stats.missionszeit}</strong>
-                        <span>Saatzeit:</span> <strong>${stats.saatzeit}</strong>
-                        <span>Prozent Saatzeit:</span> <strong>${stats.prozentSaat}%</strong>
-                        <span>RPM:</span> <strong>${stats.rpm}</strong>
-                        <span>Distanz:</span> <strong>${stats.distance.toFixed(2)} km</strong>
-                        <span>Saatdistanz:</span> <strong>${stats.seedingDistance.toFixed(2)} km</strong>
-                    </div>
-                </div>
-            `;
-
-            polyline.bindPopup(popupContent);
-
-            polyline.on('mouseover', function () {
-                group.eachLayer(l => {
-                    if (l instanceof L.Polyline) {
-                        const isPrimary = l.options.color === colorSet.base;
-                        l.setStyle({ weight: isPrimary ? 8 : 6, opacity: 1 });
-                    }
-                });
-            });
-            polyline.on('mouseout', function () {
-                group.eachLayer(l => {
-                    if (l instanceof L.Polyline) {
-                        const isPrimary = l.options.color === colorSet.base;
-                        l.setStyle({
-                            weight: isPrimary ? 5 : 3.5,
-                            opacity: isPrimary ? 1 : 0.7
-                        });
-                    }
-                });
-            });
-        }
-
-        function calculateDistance(coords) {
-            let total = 0;
-            for (let i = 0; i < coords.length - 1; i++) {
-                total += map.distance(coords[i], coords[i + 1]);
-            }
-            return total / 1000;
         }
 
         function updateUI() {
-            if (activeLogs.size === 0) {
-                logListDiv.innerHTML = '<div class="empty-state">Keine Logs geladen</div>';
-                statsSection.style.display = 'none';
-                return;
-            }
-
-            logListDiv.innerHTML = '';
-            statsSection.style.display = 'block';
-
-            let totalP = 0;
-            let totalD = 0;
-            let totalSD = 0;
-
-            activeLogs.forEach((log, filename) => {
-                const isVisible = log.visible !== false;
-
-                // Only count visible logs in totals
-                if (isVisible) {
-                    totalP += log.stats.points;
-                    totalD += log.stats.distance;
-                    totalSD += log.stats.seedingDistance;
-                }
-
-                const isStarred = log.starred === true;
-
+            logListDiv.innerHTML = activeLogs.size ? '' : '<div class="empty-state">Keine Logs</div>';
+            let tD = 0, tSD = 0;
+            activeLogs.forEach((log, name) => {
+                tD += log.stats.dist; tSD += log.stats.seedDist;
                 const item = document.createElement('div');
-                item.className = 'log-item' + (isVisible ? '' : ' log-hidden');
-                item.draggable = true;
-                item.dataset.filename = filename;
-
-                item.innerHTML = `
-                    <span class="drag-handle" title="Verschieben">&#8942;</span>
-                    <div class="log-info" style="flex:1; min-width:0; margin-left:2px;">
-                        <div class="log-name">
-                            <span class="log-color-indicator" style="background-color: ${log.colorSet.base}"></span>
-                            ${filename}
-                        </div>
-                        <div class="log-meta">${log.stats.saatzeit} Saat | ${log.stats.seedingDistance.toFixed(2)} km Saatdist.</div>
-                        <div class="log-actions" style="margin-top:6px; display:flex; gap:8px; align-items:center;">
-                            <div class="edit-log" title="Umbenennen">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z"></path>
-                                    <path d="M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path>
-                                </svg>
-                            </div>
-                            <div class="recolor-log" title="Farbe zufällig ändern">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="13.5" cy="6.5" r="1" fill="currentColor"></circle>
-                                    <circle cx="17.5" cy="10.5" r="1" fill="currentColor"></circle>
-                                    <circle cx="8.5" cy="7.5" r="1" fill="currentColor"></circle>
-                                    <circle cx="6.5" cy="12.5" r="1" fill="currentColor"></circle>
-                                    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"></path>
-                                </svg>
-                            </div>
-                            <div class="star-log${isStarred ? ' starred' : ''}" title="${isStarred ? 'Stern entfernen' : 'Favorit markieren'}">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="${isStarred ? '#f59e0b' : 'none'}" stroke="${isStarred ? '#f59e0b' : 'currentColor'}" stroke-width="2">
-                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                                </svg>
-                            </div>
-                            <div class="toggle-log" title="${isVisible ? 'Ausblenden' : 'Einblenden'}">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    ${isVisible
-                        ? '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>'
-                        : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"></path><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"></path><line x1="1" y1="1" x2="23" y2="23"></line>'}
-                                </svg>
-                            </div>
-                            <div class="delete-log" title="Löschen">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path>
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                // Drag events
-                item.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', filename);
-                    setTimeout(() => item.classList.add('dragging'), 0);
-                });
-                item.addEventListener('dragend', () => {
-                    item.classList.remove('dragging');
-                    logListDiv.querySelectorAll('.log-item').forEach(el => el.classList.remove('drag-over'));
-                });
-                item.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                    logListDiv.querySelectorAll('.log-item').forEach(el => el.classList.remove('drag-over'));
-                    item.classList.add('drag-over');
-                });
-                item.addEventListener('drop', (e) => {
-                    e.preventDefault();
-                    item.classList.remove('drag-over');
-                    const fromName = e.dataTransfer.getData('text/plain');
-                    if (fromName !== filename) reorderLogs(fromName, filename);
-                });
-
-                item.querySelector('.recolor-log').onclick = (e) => { e.stopPropagation(); recolorLog(filename); };
-                item.querySelector('.star-log').onclick = (e) => { e.stopPropagation(); toggleStar(filename); };
-                item.querySelector('.toggle-log').onclick = (e) => { e.stopPropagation(); toggleLog(filename); };
-                item.querySelector('.delete-log').onclick = (e) => { e.stopPropagation(); removeLog(filename); };
-                const editBtn = item.querySelector('.edit-log');
-                if (editBtn) {
-                    editBtn.onclick = (e) => { e.stopPropagation(); startRename(filename, item); };
-                    editBtn.ondragstart = (e) => e.preventDefault();
-                }
-                item.onclick = () => {
-                    if (isVisible) {
-                        map.fitBounds(log.group.getBounds(), { padding: [50, 50] });
-                        log.group.getLayers()[0].openPopup();
-                    }
-                };
-
-                // Hover -> highlight route on map
-                item.addEventListener('mouseenter', () => highlightLog(filename, true));
-                item.addEventListener('mouseleave', () => highlightLog(filename, false));
-
+                item.className = 'log-item';
+                item.innerHTML = `<div class="log-info"><div class="log-name"><span class="log-color-indicator" style="background-color:${log.colorSet.base}"></span>${name}</div><div class="log-meta">${Math.round(log.stats.seedTime)}s Saat | ${log.stats.seedDist.toFixed(2)}km</div></div><div class="delete-log" onclick="removeLog('${name}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg></div>`;
+                item.onclick = (e) => { if(!e.target.closest('.delete-log')) map.fitBounds(log.group.getBounds()); };
                 logListDiv.appendChild(item);
             });
-
-            totalPointsEl.textContent = totalP;
-            totalDistEl.textContent = `${totalD.toFixed(2)} km`;
-            document.getElementById('total-seed-dist').textContent = `${totalSD.toFixed(2)} km`;
+            totalDistEl.textContent = tD.toFixed(2) + " km";
+            document.getElementById('total-seed-dist').textContent = tSD.toFixed(2) + " km";
+            statsSection.style.display = activeLogs.size ? 'block' : 'none';
         }
 
-        function reorderLogs(fromName, toName) {
-            const entries = Array.from(activeLogs.entries());
-            const fromIdx = entries.findIndex(([k]) => k === fromName);
-            const toIdx = entries.findIndex(([k]) => k === toName);
-            if (fromIdx === -1 || toIdx === -1) return;
-            const [moved] = entries.splice(fromIdx, 1);
-            entries.splice(toIdx, 0, moved);
-            activeLogs.clear();
-            entries.forEach(([k, v]) => activeLogs.set(k, v));
+        function removeLog(name) {
+            const log = activeLogs.get(name);
+            map.removeLayer(log.group);
+            log.markers.forEach(m => map.removeLayer(m));
+            activeLogs.delete(name);
             updateUI();
+            matchLogsToPlan();
         }
 
-        function toggleStar(filename) {
-            const log = activeLogs.get(filename);
-            if (log) { log.starred = !log.starred; updateUI(); }
-        }
+        clearAllBtn.onclick = () => { activeLogs.forEach((_, n) => removeLog(n)); };
 
-        function toggleLog(filename) {
-            const log = activeLogs.get(filename);
-            if (!log) return;
-            log.visible = !log.visible;
-            if (log.visible) {
-                log.group.addTo(map);
-                log.markers.forEach(m => m.addTo(map));
-            } else {
-                map.removeLayer(log.group);
-                log.markers.forEach(m => map.removeLayer(m));
-            }
-            updateUI();
-        }
-
-        function removeLog(filename) {
-            const log = activeLogs.get(filename);
-            if (log) {
-                map.removeLayer(log.group);
-                log.markers.forEach(m => map.removeLayer(m));
-                activeLogs.delete(filename);
-                updateUI();
-            }
-        }
-
-        clearAllBtn.onclick = () => {
-            activeLogs.forEach((_, filename) => removeLog(filename));
-        };
-
+        // Start
+        updateSeedUI();
+        updateSeedSelects();
     </script>
 </body>
 
