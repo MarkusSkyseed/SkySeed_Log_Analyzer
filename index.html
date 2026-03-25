@@ -497,7 +497,10 @@
             </svg>
             <h1>Skyseed Analyzer</h1>
         </div>
-        <div id="status-display" style="font-size: 0.75rem; color: rgba(255,255,255,0.8);">Bereit</div>
+        <div style="display:flex; align-items:center; gap:0.75rem;">
+            <span style="font-size: 0.65rem; color: rgba(255,255,255,0.5);">v1.1.0</span>
+            <div id="status-display" style="font-size: 0.75rem; color: rgba(255,255,255,0.8);">Bereit</div>
+        </div>
     </header>
 
     <div id="map"></div>
@@ -623,6 +626,7 @@
         const activeLogs = new Map(); // filename -> {polylineGroup, markers, stats, colorSet}
         let activePlan = null;
         let colorIdx = 0;
+        let dragSrc = null;
         const colors = [
             { base: '#10b981', light: '#a7f3d0' }, // Skyseed Green
             { base: '#3b82f6', light: '#93c5fd' }, // Blue
@@ -669,6 +673,11 @@
         function showStatus(msg, timeout = 3000) {
             statusDisplay.textContent = msg;
             if (timeout > 0) setTimeout(() => statusDisplay.textContent = 'Bereit', timeout);
+        }
+
+        function formatDuration(s) {
+            const m = Math.floor(s / 60);
+            return `${m}m${Math.round(s % 60)}s`;
         }
 
         function showTab(tabId) {
@@ -950,22 +959,39 @@
 
         function calculateStats(entries) {
             let dist = 0, seedDist = 0, seedTime = 0, totalRpm = 0, seedCount = 0;
+            let armedTime = 0, missionTime = 0;
             for (let i = 0; i < entries.length - 1; i++) {
                 const c = entries[i], n = entries[i + 1];
                 const p1 = getPos(c), p2 = getPos(n);
                 if (!p1 || !p2) continue;
                 const d = map.distance(p1, p2);
                 dist += d;
+                const dt = (new Date(n.timestamp) - new Date(c.timestamp)) / 1000;
                 const mode = (c.drone?.mode || c.mode || "").toUpperCase();
                 const seeding = c.seeder?.status === "on";
+                // Format-Kompatibilität: neues Format drone.armed, altes Format drone.armedState
+                const armedRaw = c.drone?.armed ?? c.drone?.armedState ?? c.armedState;
+                if (armedRaw === true || armedRaw === "true") armedTime += dt;
+                if (mode === "AUTO") missionTime += dt;
                 if (seeding && mode === "AUTO") {
                     seedDist += d;
-                    seedTime += (new Date(n.timestamp) - new Date(c.timestamp)) / 1000;
+                    seedTime += dt;
                     const rpm = c.seeder?.rpm || c.seeder?.speedSetting;
                     if (rpm) { totalRpm += Number(rpm); seedCount++; }
                 }
             }
-            return { dist: dist / 1000, seedDist: seedDist / 1000, seedTime, rpm: seedCount ? totalRpm / seedCount : 0 };
+            return {
+                dist: dist / 1000,
+                seedDist: seedDist / 1000,
+                seedTime,
+                seedTimeFormatted: formatDuration(seedTime),
+                armedTime,
+                missionTime,
+                prozentSaat: missionTime > 0 ? (seedTime / missionTime * 100).toFixed(1) : '0.0',
+                flugId: entries[0]?.id ?? '—',
+                rpm: seedCount ? totalRpm / seedCount : 0,
+                points: entries.length
+            };
         }
 
         function addLogToMap(name, entries, stats, colorSet) {
@@ -983,11 +1009,26 @@
             }
             drawSegment(seg, status, colorSet, group);
 
+            // Popup-Inhalt für Klick auf Route
+            const popupHtml = `<div style="font-size:12px; min-width:220px;">
+                <div style="font-weight:700; color:${colorSet.base}; margin-bottom:8px;">${name}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px;">
+                    <span>Flight-ID:</span><span>${stats.flugId}</span>
+                    <span>Missionszeit:</span><span>${formatDuration(stats.missionTime)}</span>
+                    <span>Saatzeit:</span><span>${stats.seedTimeFormatted}</span>
+                    <span>% Saat:</span><span>${stats.prozentSaat}%</span>
+                    <span>RPM:</span><span>${stats.rpm.toFixed(0)}</span>
+                    <span>Gesamtdist.:</span><span>${stats.dist.toFixed(2)} km</span>
+                    <span>Saatdist.:</span><span>${stats.seedDist.toFixed(2)} km</span>
+                </div>
+            </div>`;
+            group.eachLayer(layer => layer.bindPopup(popupHtml));
+
             const p1 = getPos(entries[0]), p2 = getPos(entries[entries.length - 1]);
             const m1 = p1 ? L.circleMarker(p1, { radius: 4, color: '#10b981', fillOpacity: 1 }).addTo(map) : null;
             const m2 = p2 ? L.circleMarker(p2, { radius: 4, color: '#ef4444', fillOpacity: 1 }).addTo(map) : null;
 
-            activeLogs.set(name, { group, markers: [m1, m2].filter(m => m), stats, colorSet, entries });
+            activeLogs.set(name, { group, markers: [m1, m2].filter(m => m), stats, colorSet, entries, visible: true, starred: false });
             updateUI();
             matchLogsToPlan();
             map.fitBounds(group.getBounds());
@@ -996,24 +1037,89 @@
         function drawSegment(pts, status, colors, group) {
             if (pts.length < 2) return;
             const latlngs = pts.map(p => getPos(p)).filter(p => p);
-            L.polyline(latlngs, {
+            const baseWeight = status === "on" ? 5 : 3;
+            const pl = L.polyline(latlngs, {
                 color: status === "on" ? colors.base : colors.light,
-                weight: status === "on" ? 5 : 3,
+                weight: baseWeight,
                 opacity: status === "on" ? 1 : 0.6
             }).addTo(group);
+            pl._baseWeight = baseWeight;
         }
 
         function updateUI() {
             logListDiv.innerHTML = activeLogs.size ? '' : '<div class="empty-state">Keine Logs</div>';
-            let tD = 0, tSD = 0;
+            let tD = 0, tSD = 0, tP = 0;
             activeLogs.forEach((log, name) => {
-                tD += log.stats.dist; tSD += log.stats.seedDist;
+                tD += log.stats.dist; tSD += log.stats.seedDist; tP += (log.stats.points || 0);
+                const safeName = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                 const item = document.createElement('div');
-                item.className = 'log-item';
-                item.innerHTML = `<div class="log-info"><div class="log-name"><span class="log-color-indicator" style="background-color:${log.colorSet.base}"></span>${name}</div><div class="log-meta">${Math.round(log.stats.seedTime)}s Saat | ${log.stats.seedDist.toFixed(2)}km</div></div><div class="delete-log" onclick="removeLog('${name}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg></div>`;
-                item.onclick = (e) => { if(!e.target.closest('.delete-log')) map.fitBounds(log.group.getBounds()); };
+                item.className = 'log-item' + (log.visible === false ? ' log-hidden' : '');
+                item.setAttribute('draggable', 'true');
+                item.dataset.name = name;
+                item.innerHTML = `
+                    <span class="drag-handle" style="cursor:grab; color:var(--text-muted); padding:4px; flex-shrink:0;">⠿</span>
+                    <div class="log-info">
+                        <div class="log-name"><span class="log-color-indicator" style="background-color:${log.colorSet.base}"></span>${name}</div>
+                        <div class="log-meta">${log.stats.seedTimeFormatted} Saat | ${log.stats.seedDist.toFixed(2)} km</div>
+                    </div>
+                    <div style="display:flex; gap:2px; align-items:center; flex-shrink:0;">
+                        <span class="recolor-log" title="Farbe ändern" onclick="recolorLog('${safeName}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/><circle cx="6.5" cy="11.5" r="1" fill="currentColor"/><circle cx="8.5" cy="7.5" r="1" fill="currentColor"/><circle cx="12" cy="5.5" r="1" fill="currentColor"/><circle cx="15.5" cy="7.5" r="1" fill="currentColor"/></svg>
+                        </span>
+                        <span class="star-log${log.starred ? ' starred' : ''}" title="${log.starred ? 'Stern entfernen' : 'Favorit'}" onclick="toggleStar('${safeName}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="${log.starred ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        </span>
+                        <span class="toggle-log" title="${log.visible !== false ? 'Ausblenden' : 'Einblenden'}" onclick="toggleLog('${safeName}')">
+                            ${log.visible !== false
+                                ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`
+                                : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`}
+                        </span>
+                        <span class="delete-log" title="Löschen" onclick="removeLog('${safeName}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                        </span>
+                    </div>`;
+
+                // Hover-Highlighting — nutzt _baseWeight damit kein Drift durch updateUI-Aufrufe
+                item.addEventListener('mouseenter', () => {
+                    if (log.visible !== false) log.group.eachLayer(l => l.setStyle({ weight: (l._baseWeight || 3) + 3 }));
+                });
+                item.addEventListener('mouseleave', () => {
+                    if (log.visible !== false) log.group.eachLayer(l => l.setStyle({ weight: l._baseWeight || 3 }));
+                });
+
+                // Drag & Drop
+                item.addEventListener('dragstart', (e) => {
+                    dragSrc = name;
+                    item.style.opacity = '0.5';
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                item.addEventListener('dragend', () => {
+                    item.style.opacity = '';
+                    logListDiv.querySelectorAll('.log-item').forEach(el => el.style.outline = '');
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                    logListDiv.querySelectorAll('.log-item').forEach(el => el.style.outline = '');
+                    item.style.outline = '2px solid var(--primary-color)';
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (dragSrc && dragSrc !== name) reorderLogs(dragSrc, name);
+                });
+
+                // Klick → auf Karte zoomen
+                item.addEventListener('click', (e) => {
+                    if (!e.target.closest('.delete-log') && !e.target.closest('.recolor-log') &&
+                        !e.target.closest('.star-log') && !e.target.closest('.toggle-log') &&
+                        !e.target.closest('.drag-handle') && log.visible !== false) {
+                        map.fitBounds(log.group.getBounds());
+                    }
+                });
+
                 logListDiv.appendChild(item);
             });
+            totalPointsEl.textContent = tP;
             totalDistEl.textContent = tD.toFixed(2) + " km";
             document.getElementById('total-seed-dist').textContent = tSD.toFixed(2) + " km";
             statsSection.style.display = activeLogs.size ? 'block' : 'none';
@@ -1026,6 +1132,67 @@
             activeLogs.delete(name);
             updateUI();
             matchLogsToPlan();
+        }
+
+        function recolorLog(name) {
+            const log = activeLogs.get(name);
+            if (!log) return;
+            const h = Math.floor(Math.random() * 360);
+            const base = `hsl(${h}, 70%, 42%)`;
+            const light = `hsl(${h}, 70%, 72%)`;
+            log.colorSet = { base, light };
+            log.group.eachLayer(layer => {
+                const isSeeding = (layer._baseWeight || 3) >= 5;
+                layer.setStyle({ color: isSeeding ? base : light, weight: layer._baseWeight || 3 });
+            });
+            // Popup-Farbe aktualisieren
+            const popupHtml = `<div style="font-size:12px; min-width:220px;">
+                <div style="font-weight:700; color:${base}; margin-bottom:8px;">${name}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 16px;">
+                    <span>Flight-ID:</span><span>${log.stats.flugId}</span>
+                    <span>Missionszeit:</span><span>${formatDuration(log.stats.missionTime)}</span>
+                    <span>Saatzeit:</span><span>${log.stats.seedTimeFormatted}</span>
+                    <span>% Saat:</span><span>${log.stats.prozentSaat}%</span>
+                    <span>RPM:</span><span>${log.stats.rpm.toFixed(0)}</span>
+                    <span>Gesamtdist.:</span><span>${log.stats.dist.toFixed(2)} km</span>
+                    <span>Saatdist.:</span><span>${log.stats.seedDist.toFixed(2)} km</span>
+                </div>
+            </div>`;
+            log.group.eachLayer(layer => layer.bindPopup(popupHtml));
+            updateUI();
+        }
+
+        function toggleStar(name) {
+            const log = activeLogs.get(name);
+            if (!log) return;
+            log.starred = !log.starred;
+            updateUI();
+        }
+
+        function toggleLog(name) {
+            const log = activeLogs.get(name);
+            if (!log) return;
+            log.visible = !log.visible;
+            if (log.visible) {
+                log.group.addTo(map);
+                log.markers.forEach(m => m.addTo(map));
+            } else {
+                map.removeLayer(log.group);
+                log.markers.forEach(m => map.removeLayer(m));
+            }
+            updateUI();
+        }
+
+        function reorderLogs(fromName, toName) {
+            const entries = [...activeLogs.entries()];
+            const fromIdx = entries.findIndex(([k]) => k === fromName);
+            const toIdx = entries.findIndex(([k]) => k === toName);
+            if (fromIdx === -1 || toIdx === -1) return;
+            const [moved] = entries.splice(fromIdx, 1);
+            entries.splice(toIdx, 0, moved);
+            activeLogs.clear();
+            entries.forEach(([k, v]) => activeLogs.set(k, v));
+            updateUI();
         }
 
         clearAllBtn.onclick = () => { activeLogs.forEach((_, n) => removeLog(n)); };
